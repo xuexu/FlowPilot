@@ -884,18 +884,17 @@ function getWorkflowNodesForMode(plusModeEnabled = false, options = {}) {
   });
   if (Array.isArray(nodes) && nodes.length) {
     return nodes.slice().sort((left, right) => {
-      const leftOrder = Number.isFinite(Number(left.displayOrder)) ? Number(left.displayOrder) : Number(left.legacyStepId);
-      const rightOrder = Number.isFinite(Number(right.displayOrder)) ? Number(right.displayOrder) : Number(right.legacyStepId);
+      const leftOrder = Number.isFinite(Number(left.displayOrder)) ? Number(left.displayOrder) : 0;
+      const rightOrder = Number.isFinite(Number(right.displayOrder)) ? Number(right.displayOrder) : 0;
       if (leftOrder !== rightOrder) return leftOrder - rightOrder;
       return String(left.nodeId || '').localeCompare(String(right.nodeId || ''));
     });
   }
 
   return getStepDefinitionsForMode(plusModeEnabled, options).map((step) => ({
-    legacyStepId: Number(step.id),
     nodeId: String(step.key || '').trim(),
     title: step.title,
-    displayOrder: Number.isFinite(Number(step.order)) ? Number(step.order) : Number(step.id),
+    displayOrder: Number.isFinite(Number(step.id)) ? Number(step.id) : Number(step.order),
     executeKey: String(step.key || '').trim(),
   })).filter((node) => node.nodeId);
 }
@@ -911,7 +910,7 @@ function getStepIdByKeyForCurrentMode(stepKey = '') {
 
 function getNodeIdByStepForCurrentMode(step) {
   const numericStep = Number(step);
-  const node = (workflowNodes || []).find((candidate) => Number(candidate?.legacyStepId) === numericStep);
+  const node = (workflowNodes || []).find((candidate) => Number(candidate?.displayOrder) === numericStep);
   if (node?.nodeId) {
     return String(node.nodeId).trim();
   }
@@ -925,9 +924,9 @@ function getStepIdByNodeIdForCurrentMode(nodeId = '') {
     return 0;
   }
   const node = (workflowNodes || []).find((candidate) => String(candidate?.nodeId || '').trim() === normalizedNodeId);
-  const legacyStepId = Number(node?.legacyStepId);
-  if (Number.isInteger(legacyStepId) && legacyStepId > 0) {
-    return legacyStepId;
+  const displayOrder = Number(node?.displayOrder);
+  if (Number.isInteger(displayOrder) && displayOrder > 0) {
+    return displayOrder;
   }
   return getStepIdByKeyForCurrentMode(normalizedNodeId);
 }
@@ -970,10 +969,9 @@ function rebuildStepDefinitionState(plusModeEnabled = false, options = {}) {
       phoneSignupReloginAfterBindEmailEnabled: currentPhoneSignupReloginAfterBindEmailEnabled,
     })
     : stepDefinitions.map((step) => ({
-      legacyStepId: Number(step.id),
       nodeId: String(step.key || step.id || '').trim(),
       title: step.title,
-      displayOrder: Number.isFinite(Number(step.order)) ? Number(step.order) : Number(step.id),
+      displayOrder: Number.isFinite(Number(step.id)) ? Number(step.id) : Number(step.order),
     }));
   if (typeof workflowNodes !== 'undefined') {
     workflowNodes = nextWorkflowNodes;
@@ -2436,24 +2434,76 @@ function getLastCurrentStepId() {
   return STEP_IDS.length ? Math.max(...STEP_IDS) : 1;
 }
 
+function getStepExecutionRangeNodes() {
+  return Array.isArray(workflowNodes)
+    ? workflowNodes.filter((node) => String(node?.nodeId || '').trim())
+    : [];
+}
+
+function getStepExecutionRangeNodeLabel(node = {}) {
+  const nodeId = String(node?.nodeId || '').trim();
+  const displayOrder = Number(node?.displayOrder);
+  const title = String(node?.title || nodeId).trim();
+  const orderLabel = Number.isInteger(displayOrder) && displayOrder > 0
+    ? `步骤 ${displayOrder}`
+    : nodeId;
+  return title ? `${orderLabel} · ${title}` : orderLabel;
+}
+
+function getStepExecutionRangeBoundaryNodeId(stepNumber, boundary = 'start') {
+  const nodes = getStepExecutionRangeNodes();
+  const fallbackNode = boundary === 'end' ? nodes[nodes.length - 1] : nodes[0];
+  const resolvedNodeId = getNodeIdByStepForCurrentMode(stepNumber);
+  return String(resolvedNodeId || fallbackNode?.nodeId || '').trim();
+}
+
+function syncStepExecutionRangeSelectOptions(selectedFromNodeId = '', selectedToNodeId = '') {
+  const nodes = getStepExecutionRangeNodes();
+  const fromSelect = inputStepExecutionRangeFrom;
+  const toSelect = inputStepExecutionRangeTo;
+  if (!fromSelect || !toSelect) {
+    return;
+  }
+
+  const buildOptions = (selectedValue) => nodes.map((node) => {
+    const nodeId = String(node?.nodeId || '').trim();
+    const label = getStepExecutionRangeNodeLabel(node);
+    return `<option value="${escapeHtml(nodeId)}"${nodeId === selectedValue ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+  }).join('');
+
+  fromSelect.innerHTML = buildOptions(String(selectedFromNodeId || nodes[0]?.nodeId || '').trim());
+  toSelect.innerHTML = buildOptions(String(selectedToNodeId || nodes[nodes.length - 1]?.nodeId || '').trim());
+}
+
 function isStepExecutionRangeUiAvailable(state = latestState) {
   return getCurrentStepExecutionRangeFlowId(state) === DEFAULT_ACTIVE_FLOW_ID;
 }
 
 function clampStepExecutionRangeInputs() {
-  const maxStep = getLastCurrentStepId();
-  const fromStep = Math.min(maxStep, Math.max(1, normalizePositiveStepNumber(inputStepExecutionRangeFrom?.value, 1)));
-  const toStep = Math.min(maxStep, Math.max(1, normalizePositiveStepNumber(inputStepExecutionRangeTo?.value, maxStep)));
-  const normalizedFrom = Math.min(fromStep, toStep);
-  const normalizedTo = Math.max(fromStep, toStep);
+  const nodes = getStepExecutionRangeNodes();
+  const firstNodeId = String(nodes[0]?.nodeId || '').trim();
+  const lastNodeId = String(nodes[nodes.length - 1]?.nodeId || '').trim();
+  const selectedFromNodeId = String(inputStepExecutionRangeFrom?.value || firstNodeId).trim() || firstNodeId;
+  const selectedToNodeId = String(inputStepExecutionRangeTo?.value || lastNodeId).trim() || lastNodeId;
+  const fromStep = Math.max(1, getStepIdByNodeIdForCurrentMode(selectedFromNodeId) || 1);
+  const toStep = Math.max(1, getStepIdByNodeIdForCurrentMode(selectedToNodeId) || fromStep);
+  const normalizedFromStep = Math.min(fromStep, toStep);
+  const normalizedToStep = Math.max(fromStep, toStep);
+  const normalizedFromNodeId = getStepExecutionRangeBoundaryNodeId(normalizedFromStep, 'start');
+  const normalizedToNodeId = getStepExecutionRangeBoundaryNodeId(normalizedToStep, 'end');
+  syncStepExecutionRangeSelectOptions(normalizedFromNodeId, normalizedToNodeId);
   if (inputStepExecutionRangeFrom) {
-    inputStepExecutionRangeFrom.max = String(maxStep);
-    inputStepExecutionRangeFrom.value = String(normalizedFrom);
+    inputStepExecutionRangeFrom.value = normalizedFromNodeId;
   }
   if (inputStepExecutionRangeTo) {
-    inputStepExecutionRangeTo.max = String(maxStep);
-    inputStepExecutionRangeTo.value = String(normalizedTo);
+    inputStepExecutionRangeTo.value = normalizedToNodeId;
   }
+  return {
+    fromNodeId: normalizedFromNodeId,
+    toNodeId: normalizedToNodeId,
+    fromStep: normalizedFromStep,
+    toStep: normalizedToStep,
+  };
 }
 
 function buildStepExecutionRangeByFlowPayload(existingConfig = latestState?.stepExecutionRangeByFlow || {}) {
@@ -2461,12 +2511,12 @@ function buildStepExecutionRangeByFlowPayload(existingConfig = latestState?.step
   if (!isStepExecutionRangeUiAvailable(latestState)) {
     return config;
   }
-  clampStepExecutionRangeInputs();
+  const normalizedRange = clampStepExecutionRangeInputs();
   const flowId = getCurrentStepExecutionRangeFlowId(latestState);
   config[flowId] = normalizeStepExecutionRangeEntry({
     enabled: Boolean(inputStepExecutionRangeEnabled?.checked),
-    fromStep: inputStepExecutionRangeFrom?.value,
-    toStep: inputStepExecutionRangeTo?.value,
+    fromStep: normalizedRange?.fromStep,
+    toStep: normalizedRange?.toStep,
   });
   return config;
 }
@@ -2493,17 +2543,15 @@ function applyStepExecutionRangeState(state = latestState) {
   }
   const available = isStepExecutionRangeUiAvailable(state);
   rowStepExecutionRange.style.display = available ? '' : 'none';
-  const maxStep = getLastCurrentStepId();
   const range = getStepExecutionRangeForCurrentFlow(state);
+  const fromNodeId = getStepExecutionRangeBoundaryNodeId(range.fromStep, 'start');
+  const toNodeId = getStepExecutionRangeBoundaryNodeId(range.toStep, 'end');
+  syncStepExecutionRangeSelectOptions(fromNodeId, toNodeId);
   if (inputStepExecutionRangeFrom) {
-    inputStepExecutionRangeFrom.min = '1';
-    inputStepExecutionRangeFrom.max = String(maxStep);
-    inputStepExecutionRangeFrom.value = String(Math.min(maxStep, Math.max(1, normalizePositiveStepNumber(range.fromStep, 1))));
+    inputStepExecutionRangeFrom.value = fromNodeId;
   }
   if (inputStepExecutionRangeTo) {
-    inputStepExecutionRangeTo.min = '1';
-    inputStepExecutionRangeTo.max = String(maxStep);
-    inputStepExecutionRangeTo.value = String(Math.min(maxStep, Math.max(1, normalizePositiveStepNumber(range.toStep, maxStep))));
+    inputStepExecutionRangeTo.value = toNodeId;
   }
   if (inputStepExecutionRangeEnabled) {
     inputStepExecutionRangeEnabled.checked = Boolean(range.enabled);
@@ -14932,14 +14980,16 @@ selectFlow?.addEventListener('change', () => {
 });
 
 [inputStepExecutionRangeFrom, inputStepExecutionRangeTo].forEach((input) => {
-  input?.addEventListener('input', () => {
+  const handleRangeChange = () => {
     const stepExecutionRangeByFlow = buildStepExecutionRangeByFlowPayload(latestState?.stepExecutionRangeByFlow);
     syncLatestState({ stepExecutionRangeByFlow });
     markSettingsDirty(true);
     renderStepStatuses(latestState);
     updateButtonStates();
     scheduleSettingsAutoSave();
-  });
+  };
+  input?.addEventListener('input', handleRangeChange);
+  input?.addEventListener('change', handleRangeChange);
   input?.addEventListener('blur', () => {
     clampStepExecutionRangeInputs();
     saveSettings({ silent: true }).catch(() => { });

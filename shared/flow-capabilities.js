@@ -5,12 +5,11 @@
   const flowRegistryApi = rootScope.MultiPageFlowRegistry || {};
   const settingsSchemaApi = rootScope.MultiPageSettingsSchema || {};
   const DEFAULT_FLOW_ID = flowRegistryApi.DEFAULT_FLOW_ID || 'openai';
-  const DEFAULT_PANEL_MODE = flowRegistryApi.DEFAULT_OPENAI_SOURCE_ID || 'cpa';
-  const LEGACY_OPENAI_FLOW_ALIAS = String(flowRegistryApi.LEGACY_OPENAI_FLOW_ALIAS || 'codex').trim().toLowerCase();
+  const DEFAULT_OPENAI_INTEGRATION_TARGET_ID = flowRegistryApi.DEFAULT_OPENAI_INTEGRATION_TARGET_ID || 'cpa';
   const SIGNUP_METHOD_EMAIL = 'email';
   const SIGNUP_METHOD_PHONE = 'phone';
-  const VALID_PANEL_MODES = Array.isArray(flowRegistryApi.OPENAI_SOURCE_IDS)
-    ? flowRegistryApi.OPENAI_SOURCE_IDS.slice()
+  const VALID_OPENAI_INTEGRATION_TARGET_IDS = Array.isArray(flowRegistryApi.OPENAI_INTEGRATION_TARGET_IDS)
+    ? flowRegistryApi.OPENAI_INTEGRATION_TARGET_IDS.slice()
     : ['cpa', 'sub2api', 'codex2api'];
   const REGISTERED_FLOW_IDS = Array.isArray(flowRegistryApi.getRegisteredFlowIds?.())
     ? flowRegistryApi.getRegisteredFlowIds().map((flowId) => String(flowId || '').trim().toLowerCase()).filter(Boolean)
@@ -23,7 +22,7 @@
     supportsPhoneVerificationSettings: false,
     supportsPlusMode: false,
     supportsContributionMode: false,
-    supportsPlatformBinding: [],
+    supportedIntegrationTargets: [],
     supportsLuckmail: false,
     supportsOauthTimeoutBudget: false,
     canSwitchFlow: true,
@@ -48,7 +47,7 @@
     )
   );
 
-  const DEFAULT_PANEL_CAPABILITIES = Object.freeze({
+  const DEFAULT_INTEGRATION_TARGET_CAPABILITIES = Object.freeze({
     supportsPhoneSignup: true,
     requiresPhoneSignupWarning: false,
   });
@@ -61,9 +60,11 @@
     'plusModeEnabled',
     'signupMethod',
     'kiroSourceId',
+    'openaiIntegrationTargetId',
+    'kiroIntegrationTargetId',
   ]);
 
-  const PANEL_CAPABILITIES = Object.freeze({
+  const OPENAI_INTEGRATION_TARGET_CAPABILITIES = Object.freeze({
     cpa: Object.freeze({
       supportsPhoneSignup: true,
       requiresPhoneSignupWarning: true,
@@ -88,30 +89,26 @@
 
   function normalizeCapabilityFlowId(value = '', fallback = DEFAULT_FLOW_ID) {
     const normalized = String(value || '').trim().toLowerCase();
-    if (normalized === LEGACY_OPENAI_FLOW_ALIAS) {
-      return DEFAULT_FLOW_ID;
-    }
     if (normalized) {
       return normalized;
     }
-    const normalizedFallback = String(fallback || '').trim().toLowerCase();
-    if (normalizedFallback === LEGACY_OPENAI_FLOW_ALIAS) {
-      return DEFAULT_FLOW_ID;
-    }
-    return normalizedFallback || DEFAULT_FLOW_ID;
+    return normalizeFlowId(fallback, DEFAULT_FLOW_ID);
   }
 
   function isRegisteredFlowId(flowId = '') {
-    return REGISTERED_FLOW_ID_SET.has(normalizeCapabilityFlowId(flowId, ''));
+    const normalized = String(flowId || '').trim().toLowerCase();
+    return Boolean(normalized) && REGISTERED_FLOW_ID_SET.has(normalized);
   }
 
-  function normalizePanelMode(value = '', fallback = DEFAULT_PANEL_MODE) {
+  function normalizeOpenAiIntegrationTargetId(value = '', fallback = DEFAULT_OPENAI_INTEGRATION_TARGET_ID) {
     const normalized = String(value || '').trim().toLowerCase();
-    if (VALID_PANEL_MODES.includes(normalized)) {
+    if (VALID_OPENAI_INTEGRATION_TARGET_IDS.includes(normalized)) {
       return normalized;
     }
     const fallbackValue = String(fallback || '').trim().toLowerCase();
-    return VALID_PANEL_MODES.includes(fallbackValue) ? fallbackValue : DEFAULT_PANEL_MODE;
+    return VALID_OPENAI_INTEGRATION_TARGET_IDS.includes(fallbackValue)
+      ? fallbackValue
+      : DEFAULT_OPENAI_INTEGRATION_TARGET_ID;
   }
 
   function normalizeSignupMethod(value = '') {
@@ -120,41 +117,50 @@
       : SIGNUP_METHOD_EMAIL;
   }
 
-  function normalizePanelModeList(values = []) {
+  function normalizeOpenAiIntegrationTargetList(values = []) {
     if (!Array.isArray(values)) {
       return [];
     }
     const seen = new Set();
     const normalized = [];
     values.forEach((value) => {
-      const mode = normalizePanelMode(value, '');
-      if (!mode || seen.has(mode)) {
+      const integrationTargetId = normalizeOpenAiIntegrationTargetId(value, '');
+      if (!integrationTargetId || seen.has(integrationTargetId)) {
         return;
       }
-      seen.add(mode);
-      normalized.push(mode);
+      seen.add(integrationTargetId);
+      normalized.push(integrationTargetId);
     });
     return normalized;
   }
 
-  function getPanelModeLabel(panelMode = '') {
-    const normalized = normalizePanelMode(panelMode);
+  function getIntegrationTargetLabel(flowId = DEFAULT_FLOW_ID, integrationTargetId = '') {
+    if (
+      isRegisteredFlowId(flowId)
+      && typeof flowRegistryApi.getIntegrationTargetLabel === 'function'
+    ) {
+      return flowRegistryApi.getIntegrationTargetLabel(flowId, integrationTargetId);
+    }
+    const normalized = String(integrationTargetId || '').trim().toLowerCase();
     if (normalized === 'sub2api') {
       return 'SUB2API';
     }
     if (normalized === 'codex2api') {
       return 'Codex2API';
     }
-    return 'CPA';
+    if (normalized === 'cpa') {
+      return 'CPA';
+    }
+    return normalized || String(integrationTargetId || '').trim();
   }
 
   function createFlowCapabilityRegistry(deps = {}) {
     const {
       defaultFlowCapabilities = DEFAULT_FLOW_CAPABILITIES,
       defaultFlowId = DEFAULT_FLOW_ID,
-      defaultPanelCapabilities = DEFAULT_PANEL_CAPABILITIES,
+      defaultIntegrationTargetCapabilities = DEFAULT_INTEGRATION_TARGET_CAPABILITIES,
       flowCapabilities = FLOW_CAPABILITIES,
-      panelCapabilities = PANEL_CAPABILITIES,
+      integrationTargetCapabilities = OPENAI_INTEGRATION_TARGET_CAPABILITIES,
     } = deps;
     const settingsSchema = settingsSchemaApi.createSettingsSchema
       ? settingsSchemaApi.createSettingsSchema({
@@ -165,19 +171,70 @@
     function getFlowCapabilities(flowId) {
       const normalizedFlowId = normalizeCapabilityFlowId(flowId, defaultFlowId);
       const entry = flowCapabilities[normalizedFlowId] || null;
+      const supportedIntegrationTargets = normalizedFlowId === 'openai'
+        ? normalizeOpenAiIntegrationTargetList(
+          entry?.supportedIntegrationTargets || defaultFlowCapabilities.supportedIntegrationTargets
+        )
+        : (Array.isArray(entry?.supportedIntegrationTargets)
+          ? entry.supportedIntegrationTargets.map((value) => String(value || '').trim().toLowerCase()).filter(Boolean)
+          : []);
       return {
         ...defaultFlowCapabilities,
         ...(entry || {}),
-        supportsPlatformBinding: normalizePanelModeList(entry?.supportsPlatformBinding || defaultFlowCapabilities.supportsPlatformBinding),
+        supportedIntegrationTargets,
       };
     }
 
-    function getPanelCapabilities(panelMode) {
-      const normalizedPanelMode = normalizePanelMode(panelMode);
+    function getOpenAiIntegrationTargetCapabilities(integrationTargetId) {
+      const normalizedIntegrationTargetId = normalizeOpenAiIntegrationTargetId(integrationTargetId);
       return {
-        ...defaultPanelCapabilities,
-        ...(panelCapabilities[normalizedPanelMode] || {}),
+        ...defaultIntegrationTargetCapabilities,
+        ...(integrationTargetCapabilities[normalizedIntegrationTargetId] || {}),
       };
+    }
+
+    function normalizeRequestedIntegrationTargetId(activeFlowId, state = {}, options = {}) {
+      if (activeFlowId === 'openai') {
+        return normalizeOpenAiIntegrationTargetId(
+          options?.integrationTargetId
+          ?? options?.panelMode
+          ?? state?.openaiIntegrationTargetId
+          ?? state?.panelMode,
+          DEFAULT_OPENAI_INTEGRATION_TARGET_ID
+        );
+      }
+
+      const rawIntegrationTargetId = activeFlowId === 'kiro'
+        ? (
+          options?.integrationTargetId
+          ?? state?.kiroIntegrationTargetId
+          ?? state?.kiroSourceId
+          ?? flowRegistryApi.getDefaultIntegrationTargetId?.(activeFlowId)
+          ?? ''
+        )
+        : (
+          options?.integrationTargetId
+          ?? state?.integrationTargetId
+          ?? state?.openaiIntegrationTargetId
+          ?? state?.panelMode
+          ?? state?.kiroIntegrationTargetId
+          ?? state?.kiroSourceId
+          ?? flowRegistryApi.getDefaultIntegrationTargetId?.(activeFlowId)
+          ?? ''
+        );
+
+      if (
+        isRegisteredFlowId(activeFlowId)
+        && typeof flowRegistryApi.normalizeIntegrationTargetId === 'function'
+      ) {
+        return flowRegistryApi.normalizeIntegrationTargetId(
+          activeFlowId,
+          rawIntegrationTargetId,
+          flowRegistryApi.getDefaultIntegrationTargetId?.(activeFlowId)
+        );
+      }
+
+      return String(rawIntegrationTargetId || '').trim().toLowerCase();
     }
 
     function normalizeChangedKeys(values = []) {
@@ -195,28 +252,33 @@
       return normalized;
     }
 
-    function resolveEffectiveSourceId(activeFlowId, state = {}, requestedPanelMode = DEFAULT_PANEL_MODE) {
+    function resolveEffectiveIntegrationTargetId(activeFlowId, state = {}, requestedIntegrationTargetId = DEFAULT_OPENAI_INTEGRATION_TARGET_ID) {
       if (!isRegisteredFlowId(activeFlowId)) {
-        return normalizePanelMode(state?.panelMode || requestedPanelMode, requestedPanelMode || DEFAULT_PANEL_MODE);
+        return normalizeRequestedIntegrationTargetId(activeFlowId, state, {
+          integrationTargetId: requestedIntegrationTargetId,
+        });
       }
-      if (settingsSchema?.getSelectedSourceId) {
-        const sourceFromSchema = settingsSchema.getSelectedSourceId({
+      if (settingsSchema?.getSelectedIntegrationTargetId) {
+        const integrationTargetId = settingsSchema.getSelectedIntegrationTargetId({
           ...state,
           activeFlowId,
         }, activeFlowId);
-        if (sourceFromSchema) {
-          return sourceFromSchema;
+        if (integrationTargetId) {
+          return integrationTargetId;
         }
       }
-      if (typeof flowRegistryApi.normalizeSourceId === 'function') {
-        if (activeFlowId === 'openai') {
-          return flowRegistryApi.normalizeSourceId('openai', state?.panelMode || requestedPanelMode, DEFAULT_PANEL_MODE);
-        }
-        return flowRegistryApi.normalizeSourceId(activeFlowId, state?.kiroSourceId || '', flowRegistryApi.getDefaultSourceId?.(activeFlowId));
+      if (typeof flowRegistryApi.normalizeIntegrationTargetId === 'function') {
+        return flowRegistryApi.normalizeIntegrationTargetId(
+          activeFlowId,
+          activeFlowId === 'openai'
+            ? (state?.openaiIntegrationTargetId || state?.panelMode || requestedIntegrationTargetId)
+            : (state?.kiroIntegrationTargetId || state?.kiroSourceId || requestedIntegrationTargetId),
+          flowRegistryApi.getDefaultIntegrationTargetId?.(activeFlowId)
+        );
       }
       return activeFlowId === 'openai'
-        ? normalizePanelMode(state?.panelMode || requestedPanelMode)
-        : '';
+        ? normalizeOpenAiIntegrationTargetId(requestedIntegrationTargetId)
+        : String(requestedIntegrationTargetId || '').trim().toLowerCase();
     }
 
     function resolveSidepanelCapabilities(options = {}) {
@@ -226,19 +288,25 @@
         defaultFlowId
       );
       const flowState = getFlowCapabilities(activeFlowId);
-      const requestedPanelMode = normalizePanelMode(
-        options?.panelMode ?? state?.panelMode,
-        DEFAULT_PANEL_MODE
+      const requestedIntegrationTargetId = normalizeRequestedIntegrationTargetId(
+        activeFlowId,
+        state,
+        options
       );
-      const supportedPanelModes = normalizePanelModeList(flowState.supportsPlatformBinding);
-      const panelModeSupported = supportedPanelModes.length === 0
+      const supportedIntegrationTargets = activeFlowId === 'openai'
+        ? normalizeOpenAiIntegrationTargetList(flowState.supportedIntegrationTargets)
+        : (Array.isArray(flowState.supportedIntegrationTargets)
+          ? flowState.supportedIntegrationTargets.slice()
+          : []);
+      const integrationTargetSupported = supportedIntegrationTargets.length === 0
         ? true
-        : supportedPanelModes.includes(requestedPanelMode);
-      const effectivePanelMode = panelModeSupported
-        ? requestedPanelMode
-        : (supportedPanelModes[0] || requestedPanelMode);
-      const panelState = getPanelCapabilities(effectivePanelMode);
-      const effectiveSourceId = resolveEffectiveSourceId(activeFlowId, state, effectivePanelMode);
+        : supportedIntegrationTargets.includes(requestedIntegrationTargetId);
+      const effectiveIntegrationTargetId = integrationTargetSupported
+        ? requestedIntegrationTargetId
+        : (supportedIntegrationTargets[0] || requestedIntegrationTargetId);
+      const integrationTargetState = activeFlowId === 'openai'
+        ? getOpenAiIntegrationTargetCapabilities(effectiveIntegrationTargetId)
+        : defaultIntegrationTargetCapabilities;
       const runtimeLocks = {
         autoRunLocked: Boolean(options?.autoRunLocked ?? state?.autoRunLocked),
         contributionMode: activeFlowId === 'openai' && flowState.supportsContributionMode && Boolean(state?.contributionMode),
@@ -252,7 +320,7 @@
       }
       const canSelectPhoneSignup = activeFlowId === 'openai'
         && Boolean(flowState.supportsPhoneSignup)
-        && Boolean(panelState.supportsPhoneSignup)
+        && Boolean(integrationTargetState.supportsPhoneSignup)
         && runtimeLocks.phoneVerificationEnabled
         && !runtimeLocks.plusModeEnabled
         && !runtimeLocks.contributionMode;
@@ -272,7 +340,7 @@
           : effectiveSignupMethods[0]);
       const visibleGroupIds = typeof flowRegistryApi.getVisibleGroupIds === 'function'
         && isRegisteredFlowId(activeFlowId)
-        ? flowRegistryApi.getVisibleGroupIds(activeFlowId, effectiveSourceId)
+        ? flowRegistryApi.getVisibleGroupIds(activeFlowId, effectiveIntegrationTargetId)
         : [];
 
       return {
@@ -283,33 +351,38 @@
         canShowPlusSettings: activeFlowId === 'openai' && Boolean(flowState.supportsPlusMode),
         canSwitchFlow: Boolean(flowState.canSwitchFlow),
         canUsePhoneSignup: canSelectPhoneSignup,
-        canUseSelectedPanelMode: panelModeSupported,
-        effectivePanelMode,
+        canUseSelectedPanelMode: integrationTargetSupported,
+        effectiveIntegrationTargetId,
+        effectivePanelMode: effectiveIntegrationTargetId,
         effectiveSignupMethod,
         effectiveSignupMethods,
-        effectiveSourceId,
+        effectiveSourceId: effectiveIntegrationTargetId,
         flowCapabilities: flowState,
-        panelCapabilities: panelState,
-        panelMode: effectivePanelMode,
-        requestedPanelMode,
+        integrationTargetCapabilities: integrationTargetState,
+        panelCapabilities: integrationTargetState,
+        panelMode: effectiveIntegrationTargetId,
+        requestedIntegrationTargetId,
+        requestedPanelMode: requestedIntegrationTargetId,
         requestedSignupMethod,
         runtimeLocks,
         shouldWarnCpaPhoneSignup: effectiveSignupMethod === SIGNUP_METHOD_PHONE
-          && Boolean(panelState.requiresPhoneSignupWarning),
+          && Boolean(integrationTargetState.requiresPhoneSignupWarning),
         stepDefinitionOptions: {
           activeFlowId,
-          panelMode: effectivePanelMode,
+          integrationTargetId: effectiveIntegrationTargetId,
+          panelMode: effectiveIntegrationTargetId,
           plusModeEnabled: runtimeLocks.plusModeEnabled,
           signupMethod: effectiveSignupMethod,
         },
-        supportedPanelModes,
+        supportedIntegrationTargets,
+        supportedPanelModes: supportedIntegrationTargets,
         visibleGroupIds,
       };
     }
 
     function buildPhoneSignupValidationError(capabilityState = {}) {
       const flowState = capabilityState.flowCapabilities || {};
-      const panelState = capabilityState.panelCapabilities || {};
+      const integrationTargetState = capabilityState.integrationTargetCapabilities || {};
       const runtimeLocks = capabilityState.runtimeLocks || {};
 
       if (!flowState.supportsPhoneSignup) {
@@ -318,10 +391,10 @@
           message: '当前 flow 不支持手机号注册。',
         };
       }
-      if (!panelState.supportsPhoneSignup) {
+      if (!integrationTargetState.supportsPhoneSignup) {
         return {
           code: 'phone_signup_panel_unsupported',
-          message: `当前来源 ${getPanelModeLabel(capabilityState.requestedPanelMode)} 不支持手机号注册。`,
+          message: `当前来源 ${getIntegrationTargetLabel(capabilityState.activeFlowId, capabilityState.requestedIntegrationTargetId)} 不支持手机号注册。`,
         };
       }
       if (!runtimeLocks.phoneVerificationEnabled) {
@@ -354,13 +427,13 @@
       const errors = [];
 
       if (
-        Array.isArray(capabilityState.supportedPanelModes)
-        && capabilityState.supportedPanelModes.length > 0
+        Array.isArray(capabilityState.supportedIntegrationTargets)
+        && capabilityState.supportedIntegrationTargets.length > 0
         && capabilityState.canUseSelectedPanelMode === false
       ) {
         errors.push({
           code: 'panel_mode_unsupported',
-          message: `当前 flow 不支持 ${getPanelModeLabel(capabilityState.requestedPanelMode)} 来源。`,
+          message: `当前 flow 不支持 ${getIntegrationTargetLabel(capabilityState.activeFlowId, capabilityState.requestedIntegrationTargetId)} 来源。`,
         });
       }
 
@@ -408,15 +481,18 @@
       const shouldReconcileSignupMethod = MODE_SWITCH_RELEVANT_KEYS.some((key) => changedKeySet.has(key));
 
       if (
-        changedKeySet.has('panelMode')
-        && Array.isArray(capabilityState.supportedPanelModes)
-        && capabilityState.supportedPanelModes.length > 0
+        (changedKeySet.has('panelMode') || changedKeySet.has('openaiIntegrationTargetId') || changedKeySet.has('kiroIntegrationTargetId'))
+        && Array.isArray(capabilityState.supportedIntegrationTargets)
+        && capabilityState.supportedIntegrationTargets.length > 0
         && capabilityState.canUseSelectedPanelMode === false
       ) {
-        normalizedUpdates.panelMode = capabilityState.effectivePanelMode;
+        normalizedUpdates.panelMode = capabilityState.effectiveIntegrationTargetId;
+        normalizedUpdates.openaiIntegrationTargetId = capabilityState.effectiveIntegrationTargetId;
+        normalizedUpdates.kiroIntegrationTargetId = capabilityState.effectiveIntegrationTargetId;
+        normalizedUpdates.kiroSourceId = capabilityState.effectiveIntegrationTargetId;
         errors.push({
           code: 'panel_mode_unsupported',
-          message: `当前 flow 不支持 ${getPanelModeLabel(capabilityState.requestedPanelMode)} 来源。`,
+          message: `当前 flow 不支持 ${getIntegrationTargetLabel(capabilityState.activeFlowId, capabilityState.requestedIntegrationTargetId)} 来源。`,
         });
       }
 
@@ -480,9 +556,9 @@
     return {
       canUsePhoneSignup,
       getFlowCapabilities,
-      getPanelCapabilities,
+      getOpenAiIntegrationTargetCapabilities,
       normalizeFlowId,
-      normalizePanelMode,
+      normalizeOpenAiIntegrationTargetId,
       normalizeSignupMethod,
       resolveSidepanelCapabilities,
       resolveSignupMethod,
@@ -495,15 +571,15 @@
     createFlowCapabilityRegistry,
     DEFAULT_FLOW_CAPABILITIES,
     DEFAULT_FLOW_ID,
-    DEFAULT_PANEL_CAPABILITIES,
-    DEFAULT_PANEL_MODE,
+    DEFAULT_INTEGRATION_TARGET_CAPABILITIES,
+    DEFAULT_OPENAI_INTEGRATION_TARGET_ID,
     FLOW_CAPABILITIES,
-    PANEL_CAPABILITIES,
+    OPENAI_INTEGRATION_TARGET_CAPABILITIES,
     SIGNUP_METHOD_EMAIL,
     SIGNUP_METHOD_PHONE,
-    VALID_PANEL_MODES,
+    VALID_OPENAI_INTEGRATION_TARGET_IDS,
     normalizeFlowId,
-    normalizePanelMode,
+    normalizeOpenAiIntegrationTargetId,
     normalizeSignupMethod,
   };
 });

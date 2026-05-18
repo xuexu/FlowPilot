@@ -13,37 +13,31 @@ function loadApis() {
   };`)(scope);
 }
 
-test('flow registry exposes openai and kiro with canonical source metadata', () => {
+test('flow registry exposes canonical flow and integration target metadata', () => {
   const { flowRegistry } = loadApis();
 
   assert.deepEqual(flowRegistry.getRegisteredFlowIds(), ['openai', 'kiro']);
-  assert.equal(flowRegistry.getFlowLabel('codex'), 'Codex / OpenAI');
-  assert.equal(flowRegistry.normalizeFlowId('codex'), 'openai');
-  assert.equal(flowRegistry.normalizeSourceId('openai', 'sub2api'), 'sub2api');
-  assert.equal(flowRegistry.normalizeSourceId('kiro', 'anything-else'), 'kiro-rs');
+  assert.equal(flowRegistry.normalizeFlowId('kiro'), 'kiro');
+  assert.equal(flowRegistry.normalizeFlowId('unknown'), 'openai');
+  assert.equal(flowRegistry.getFlowLabel('openai'), 'Codex / OpenAI');
+  assert.equal(flowRegistry.normalizeIntegrationTargetId('openai', 'sub2api'), 'sub2api');
+  assert.equal(flowRegistry.normalizeIntegrationTargetId('kiro', 'anything-else'), 'kiro-rs');
   assert.deepEqual(
     flowRegistry.getVisibleGroupIds('openai', 'cpa'),
-    ['openai-plus', 'openai-phone', 'openai-oauth', 'openai-step6', 'openai-source-cpa', 'service-account', 'service-email', 'service-proxy']
+    ['openai-plus', 'openai-phone', 'openai-oauth', 'openai-step6', 'openai-target-cpa', 'service-account', 'service-email', 'service-proxy']
   );
   assert.deepEqual(
     flowRegistry.getVisibleGroupIds('kiro', 'kiro-rs'),
-    ['kiro-runtime-status', 'kiro-source-kiro-rs', 'service-account', 'service-email', 'service-proxy']
+    ['kiro-runtime-status', 'kiro-target-kiro-rs', 'service-account', 'service-email', 'service-proxy']
   );
   assert.deepEqual(
-    flowRegistry.getSettingsGroupDefinition('openai-plus')?.rowIds || [],
-    ['row-plus-mode']
+    flowRegistry.getIntegrationTargetOptions('openai').map((entry) => entry.id),
+    ['cpa', 'sub2api', 'codex2api']
   );
-  assert.deepEqual(
-    flowRegistry.getSettingsGroupDefinition('openai-phone')?.rowIds || [],
-    []
-  );
-  assert.deepEqual(
-    flowRegistry.getSettingsGroupDefinition('openai-step6')?.rowIds || [],
-    ['row-step6-cookie-settings']
-  );
+  assert.equal(flowRegistry.getPublicationTargetDefinition('kiro', 'kiro-rs')?.label, 'kiro.rs');
 });
 
-test('settings schema normalizes flat input into canonical flow and service namespaces', () => {
+test('settings schema normalizes view input into canonical nested namespaces', () => {
   const { settingsSchema } = loadApis();
   const schema = settingsSchema.createSettingsSchema();
 
@@ -66,10 +60,10 @@ test('settings schema normalizes flat input into canonical flow and service name
   assert.equal(normalized.services.email.provider, 'hotmail');
   assert.equal(normalized.services.proxy.enabled, true);
   assert.equal(normalized.services.account.customPassword, 'SharedSecret123!');
-  assert.equal(normalized.flows.openai.source.selected, 'sub2api');
-  assert.equal(normalized.flows.kiro.source.selected, 'kiro-rs');
-  assert.equal(normalized.flows.kiro.source.entries['kiro-rs'].kiroRsUrl, 'https://kiro.example.com/admin');
-  assert.equal(normalized.flows.kiro.source.entries['kiro-rs'].kiroRsKey, 'secret-key');
+  assert.equal(normalized.flows.openai.integrationTargetId, 'sub2api');
+  assert.equal(normalized.flows.kiro.integrationTargetId, 'kiro-rs');
+  assert.equal(normalized.flows.kiro.integrationTargets['kiro-rs'].baseUrl, 'https://kiro.example.com/admin');
+  assert.equal(normalized.flows.kiro.integrationTargets['kiro-rs'].apiKey, 'secret-key');
   assert.deepEqual(normalized.flows.kiro.autoRun.stepExecutionRange, {
     enabled: true,
     fromStep: 1,
@@ -77,22 +71,24 @@ test('settings schema normalizes flat input into canonical flow and service name
   });
 });
 
-test('settings schema can project canonical state back to legacy payload without losing flow selection', () => {
+test('settings schema can project canonical state into a read view without legacy rebuild helpers', () => {
   const { settingsSchema } = loadApis();
   const schema = settingsSchema.createSettingsSchema();
-  const payload = schema.buildLegacySettingsPayload(schema.normalizeSettingsState({
+  const normalized = schema.normalizeSettingsState({
     activeFlowId: 'kiro',
-    kiroSourceId: 'kiro-rs',
+    kiroIntegrationTargetId: 'kiro-rs',
     kiroRsUrl: 'https://kiro.example.com/admin',
     kiroRsKey: 'key-123',
-  }));
+  });
+  const view = schema.buildSettingsView(normalized);
 
-  assert.equal(payload.activeFlowId, 'kiro');
-  assert.equal(payload.panelMode, 'cpa');
-  assert.equal(payload.kiroSourceId, 'kiro-rs');
-  assert.equal(payload.kiroRsUrl, 'https://kiro.example.com/admin');
-  assert.equal(payload.kiroRsKey, 'key-123');
-  assert.equal(Object.prototype.hasOwnProperty.call(payload, 'kiroRegion'), false);
-  assert.equal(payload.settingsSchemaVersion, 3);
-  assert.equal(payload.settingsState.activeFlowId, 'kiro');
+  assert.equal(view.activeFlowId, 'kiro');
+  assert.equal(view.openaiIntegrationTargetId, 'cpa');
+  assert.equal(view.kiroIntegrationTargetId, 'kiro-rs');
+  assert.equal(view.panelMode, 'cpa');
+  assert.equal(view.kiroSourceId, 'kiro-rs');
+  assert.equal(view.kiroRsUrl, 'https://kiro.example.com/admin');
+  assert.equal(view.kiroRsKey, 'key-123');
+  assert.equal(view.settingsSchemaVersion, 4);
+  assert.equal(view.settingsState.activeFlowId, 'kiro');
 });

@@ -348,11 +348,10 @@
   function cloneNodes(steps = [], options = {}, flowId = DEFAULT_ACTIVE_FLOW_ID) {
     const { builder } = getFlowDefinitionBuilder({ activeFlowId: flowId });
     return steps.map((step) => ({
-      legacyStepId: Number(step.id),
       nodeId: String(step.key || '').trim(),
       flowId,
       title: builder?.resolveStepTitle ? builder.resolveStepTitle(step, options) : step.title,
-      displayOrder: Number.isFinite(Number(step.order)) ? Number(step.order) : Number(step.id),
+      displayOrder: Number.isFinite(Number(step.id)) ? Number(step.id) : Number(step.order),
       nodeType: 'task',
       sourceId: step.sourceId || '',
       driverId: step.driverId || '',

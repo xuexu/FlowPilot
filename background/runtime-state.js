@@ -244,21 +244,6 @@
       };
     }
 
-    function flattenFlowStateById(flowState = {}, flowId = 'openai') {
-      const fieldGroups = FLOW_FIELD_GROUPS[flowId] || {};
-      const scopedState = normalizePlainObject(flowState[flowId]);
-      const next = {};
-      for (const [groupKey, fields] of Object.entries(fieldGroups)) {
-        const group = normalizePlainObject(scopedState[groupKey]);
-        for (const field of fields) {
-          if (Object.prototype.hasOwnProperty.call(group, field)) {
-            next[field] = cloneValue(group[field]);
-          }
-        }
-      }
-      return next;
-    }
-
     function buildScopedFlowState(baseFlowState = {}, state = {}, flowId = 'openai') {
       const fieldGroups = FLOW_FIELD_GROUPS[flowId] || {};
       const baseScopedState = cloneValue(normalizePlainObject(baseFlowState[flowId]));
@@ -276,13 +261,133 @@
       return scopedState;
     }
 
-    function buildOpenAiFlowState(baseValue = {}, state = {}) {
+    function buildFlowState(baseValue = {}, state = {}) {
       const baseFlowState = cloneValue(normalizePlainObject(baseValue));
       return {
         ...baseFlowState,
         openai: buildScopedFlowState(baseFlowState, state, 'openai'),
         kiro: buildScopedFlowState(baseFlowState, state, 'kiro'),
       };
+    }
+
+    function listFlowFieldNames() {
+      const fields = [];
+      for (const flowGroups of Object.values(FLOW_FIELD_GROUPS)) {
+        for (const groupFields of Object.values(normalizePlainObject(flowGroups))) {
+          for (const field of Array.isArray(groupFields) ? groupFields : []) {
+            const normalizedField = String(field || '').trim();
+            if (normalizedField) {
+              fields.push(normalizedField);
+            }
+          }
+        }
+      }
+      return Array.from(new Set(fields));
+    }
+
+    const FLOW_RUNTIME_FIELDS = Object.freeze(listFlowFieldNames());
+    const RUNTIME_TOP_LEVEL_FIELDS = Object.freeze([
+      ...RUNTIME_SHARED_FIELDS,
+      ...RUNTIME_PROXY_FIELDS,
+      ...FLOW_RUNTIME_FIELDS,
+    ]);
+    const RUNTIME_TOP_LEVEL_FIELD_SET = new Set(RUNTIME_TOP_LEVEL_FIELDS);
+    const RUNTIME_PATCH_IGNORED_KEYS = new Set([
+      'runtimeState',
+      'flowState',
+      'sharedState',
+      'serviceState',
+      'flows',
+      'shared',
+      'services',
+      'currentStep',
+      'stepStatuses',
+      'legacyStepCompat',
+      'flowId',
+      'runId',
+      'activeFlowId',
+      'activeRunId',
+      'currentNodeId',
+      'nodeStatuses',
+      ...RUNTIME_TOP_LEVEL_FIELDS,
+    ]);
+
+    function projectScopedFlowFields(flowState = {}) {
+      const next = {};
+      for (const [flowId, fieldGroups] of Object.entries(FLOW_FIELD_GROUPS)) {
+        const scopedState = normalizePlainObject(normalizePlainObject(flowState)[flowId]);
+        for (const [groupKey, fields] of Object.entries(fieldGroups)) {
+          const group = normalizePlainObject(scopedState[groupKey]);
+          Object.assign(next, pickDefinedFields(group, fields));
+        }
+      }
+      return next;
+    }
+
+    function projectRuntimeViewFields(runtimeState = {}) {
+      const normalizedRuntimeState = normalizePlainObject(runtimeState);
+      return {
+        ...pickDefinedFields(
+          normalizePlainObject(normalizedRuntimeState.sharedState),
+          RUNTIME_SHARED_FIELDS
+        ),
+        ...pickDefinedFields(
+          normalizePlainObject(normalizePlainObject(normalizedRuntimeState.serviceState).proxy),
+          RUNTIME_PROXY_FIELDS
+        ),
+        ...projectScopedFlowFields(normalizedRuntimeState.flowState),
+      };
+    }
+
+    function buildRuntimeInputFromPatch(updates = {}) {
+      const normalizedUpdates = normalizePlainObject(updates);
+      const runtimeStatePatch = normalizePlainObject(normalizedUpdates.runtimeState);
+      const next = {
+        ...pickDefinedFields(normalizedUpdates, [
+          'flowId',
+          'runId',
+          'activeFlowId',
+          'activeRunId',
+          'currentNodeId',
+          'nodeStatuses',
+        ]),
+        ...pickDefinedFields(runtimeStatePatch, [
+          'flowId',
+          'runId',
+          'activeFlowId',
+          'activeRunId',
+          'currentNodeId',
+          'nodeStatuses',
+        ]),
+        ...projectRuntimeViewFields(runtimeStatePatch),
+        ...pickDefinedFields(normalizedUpdates, RUNTIME_TOP_LEVEL_FIELDS),
+      };
+
+      if (Object.prototype.hasOwnProperty.call(normalizedUpdates, 'sharedState')) {
+        Object.assign(
+          next,
+          pickDefinedFields(normalizePlainObject(normalizedUpdates.sharedState), RUNTIME_SHARED_FIELDS)
+        );
+      }
+      if (Object.prototype.hasOwnProperty.call(normalizedUpdates, 'serviceState')) {
+        Object.assign(
+          next,
+          pickDefinedFields(
+            normalizePlainObject(normalizePlainObject(normalizedUpdates.serviceState).proxy),
+            RUNTIME_PROXY_FIELDS
+          )
+        );
+      }
+      if (Object.prototype.hasOwnProperty.call(normalizedUpdates, 'flowState')) {
+        Object.assign(next, projectScopedFlowFields(normalizedUpdates.flowState));
+      }
+      if (!Object.prototype.hasOwnProperty.call(next, 'flowId') && Object.prototype.hasOwnProperty.call(next, 'activeFlowId')) {
+        next.flowId = next.activeFlowId;
+      }
+      if (!Object.prototype.hasOwnProperty.call(next, 'runId') && Object.prototype.hasOwnProperty.call(next, 'activeRunId')) {
+        next.runId = next.activeRunId;
+      }
+      return next;
     }
 
     function buildRuntimeStateDefault() {
@@ -366,69 +471,18 @@
         nodeStatuses,
         sharedState: buildSharedState(baseRuntimeState.sharedState, state),
         serviceState: buildServiceState(baseRuntimeState.serviceState, state),
-        flowState: buildOpenAiFlowState(baseRuntimeState.flowState, state),
+        flowState: buildFlowState(baseRuntimeState.flowState, state),
       };
     }
 
-    function buildFlattenedUpdates(updates = {}) {
-      const ignoredKeys = new Set(['current' + 'Step', 'step' + 'Statuses', 'legacy' + 'StepCompat']);
+    function buildPersistentPatchPayload(updates = {}) {
       const next = {};
-      for (const [key, value] of Object.entries(updates || {})) {
-        if (!ignoredKeys.has(key)) {
-          next[key] = value;
+      for (const [key, value] of Object.entries(normalizePlainObject(updates))) {
+        if (RUNTIME_PATCH_IGNORED_KEYS.has(key)) {
+          continue;
         }
+        next[key] = cloneValue(value);
       }
-      const runtimeState = normalizePlainObject(updates.runtimeState);
-      const sharedState = normalizePlainObject(updates.sharedState);
-      const serviceState = normalizePlainObject(updates.serviceState);
-      const flowState = normalizePlainObject(updates.flowState);
-
-      if (Object.prototype.hasOwnProperty.call(runtimeState, 'activeFlowId')) {
-        next.activeFlowId = runtimeState.activeFlowId;
-      }
-      if (Object.prototype.hasOwnProperty.call(runtimeState, 'flowId')) {
-        next.flowId = runtimeState.flowId;
-        next.activeFlowId = runtimeState.flowId;
-      }
-      if (Object.prototype.hasOwnProperty.call(runtimeState, 'activeRunId')) {
-        next.activeRunId = runtimeState.activeRunId;
-      }
-      if (Object.prototype.hasOwnProperty.call(runtimeState, 'runId')) {
-        next.runId = runtimeState.runId;
-        next.activeRunId = runtimeState.runId;
-      }
-      if (Object.prototype.hasOwnProperty.call(runtimeState, 'currentNodeId')) {
-        next.currentNodeId = runtimeState.currentNodeId;
-      }
-      if (Object.prototype.hasOwnProperty.call(runtimeState, 'nodeStatuses')) {
-        next.nodeStatuses = cloneValue(runtimeState.nodeStatuses);
-      }
-      Object.assign(next, pickDefinedFields(sharedState, RUNTIME_SHARED_FIELDS));
-      if (Object.prototype.hasOwnProperty.call(runtimeState, 'sharedState')) {
-        Object.assign(
-          next,
-          pickDefinedFields(normalizePlainObject(runtimeState.sharedState), RUNTIME_SHARED_FIELDS)
-        );
-      }
-
-      const serviceProxy = normalizePlainObject(serviceState.proxy);
-      Object.assign(next, pickDefinedFields(serviceProxy, RUNTIME_PROXY_FIELDS));
-      if (Object.prototype.hasOwnProperty.call(runtimeState, 'serviceState')) {
-        const runtimeServiceState = normalizePlainObject(runtimeState.serviceState);
-        Object.assign(
-          next,
-          pickDefinedFields(normalizePlainObject(runtimeServiceState.proxy), RUNTIME_PROXY_FIELDS)
-        );
-      }
-
-      Object.assign(next, flattenFlowStateById(flowState, 'openai'));
-      Object.assign(next, flattenFlowStateById(flowState, 'kiro'));
-      if (Object.prototype.hasOwnProperty.call(runtimeState, 'flowState')) {
-        const runtimeFlowState = normalizePlainObject(runtimeState.flowState);
-        Object.assign(next, flattenFlowStateById(runtimeFlowState, 'openai'));
-        Object.assign(next, flattenFlowStateById(runtimeFlowState, 'kiro'));
-      }
-
       return next;
     }
 
@@ -436,6 +490,7 @@
       const runtimeState = ensureRuntimeState(state);
       return {
         ...state,
+        ...projectRuntimeViewFields(runtimeState),
         flowId: runtimeState.flowId,
         runId: runtimeState.runId,
         activeFlowId: runtimeState.activeFlowId,
@@ -453,15 +508,15 @@
     }
 
     function buildSessionStatePatch(currentState = {}, updates = {}) {
-      const flattenedUpdates = buildFlattenedUpdates(updates);
-      const nextState = {
-        ...currentState,
-        ...flattenedUpdates,
-      };
-      const runtimeState = ensureRuntimeState(nextState);
+      const currentRuntimeState = ensureRuntimeState(currentState);
+      const runtimeState = ensureRuntimeState({
+        runtimeState: currentRuntimeState,
+        ...projectRuntimeViewFields(currentRuntimeState),
+        ...buildRuntimeInputFromPatch(updates),
+      });
 
       return {
-        ...flattenedUpdates,
+        ...buildPersistentPatchPayload(updates),
         flowId: runtimeState.flowId,
         runId: runtimeState.runId,
         activeFlowId: runtimeState.activeFlowId,

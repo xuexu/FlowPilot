@@ -124,8 +124,8 @@ test('runtime-state patch accepts nested flow and node updates without legacy st
   assert.equal(patch.activeFlowId, 'openai');
   assert.equal(patch.activeRunId, 'run-001');
   assert.equal(patch.currentNodeId, 'oauth-login');
-  assert.equal(patch.oauthUrl, 'https://new.example.com/start');
-  assert.equal(patch.plusCheckoutTabId, 99);
+  assert.equal(Object.prototype.hasOwnProperty.call(patch, 'oauthUrl'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(patch, 'plusCheckoutTabId'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(patch, 'currentStep'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(patch, 'stepStatuses'), false);
   assert.deepStrictEqual(patch.nodeStatuses, {
@@ -135,6 +135,10 @@ test('runtime-state patch accepts nested flow and node updates without legacy st
   });
   assert.equal(patch.runtimeState.flowState.openai.auth.oauthUrl, 'https://new.example.com/start');
   assert.equal(patch.runtimeState.flowState.openai.plus.plusCheckoutTabId, 99);
+
+  const view = helpers.buildStateView(patch);
+  assert.equal(view.oauthUrl, 'https://new.example.com/start');
+  assert.equal(view.plusCheckoutTabId, 99);
 });
 
 test('runtime-state patch prefers explicit activeFlowId over stale legacy flowId', () => {

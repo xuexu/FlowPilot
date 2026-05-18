@@ -32,9 +32,11 @@
   function createSettingsSchema(deps = {}) {
     const rootScope = typeof self !== 'undefined' ? self : globalThis;
     const flowRegistry = deps.flowRegistry || rootScope.MultiPageFlowRegistry || {};
-    const defaultFlowId = String(deps.defaultFlowId || flowRegistry.DEFAULT_FLOW_ID || 'openai').trim().toLowerCase() || 'openai';
-    const defaultOpenAiSourceId = flowRegistry.DEFAULT_OPENAI_SOURCE_ID || 'cpa';
-    const defaultKiroSourceId = flowRegistry.DEFAULT_KIRO_SOURCE_ID || 'kiro-rs';
+    const defaultFlowId = String(
+      deps.defaultFlowId || flowRegistry.DEFAULT_FLOW_ID || 'openai'
+    ).trim().toLowerCase() || 'openai';
+    const defaultOpenAiIntegrationTargetId = flowRegistry.DEFAULT_OPENAI_INTEGRATION_TARGET_ID || 'cpa';
+    const defaultKiroIntegrationTargetId = flowRegistry.DEFAULT_KIRO_INTEGRATION_TARGET_ID || 'kiro-rs';
     const defaultKiroRsUrl = flowRegistry.DEFAULT_KIRO_RS_URL || 'https://kiro.leftcode.xyz/admin';
     const normalizeFlowId = typeof flowRegistry.normalizeFlowId === 'function'
       ? flowRegistry.normalizeFlowId
@@ -42,19 +44,13 @@
         const normalized = String(value || '').trim().toLowerCase();
         return normalized || String(fallback || '').trim().toLowerCase() || defaultFlowId;
       });
-    const normalizeSourceId = typeof flowRegistry.normalizeSourceId === 'function'
-      ? flowRegistry.normalizeSourceId
-      : ((flowId, value = '', fallback = '') => String(value || fallback || '').trim().toLowerCase());
-    const mapSourceIdToPanelMode = typeof flowRegistry.mapSourceIdToPanelMode === 'function'
-      ? flowRegistry.mapSourceIdToPanelMode
-      : ((_flowId, sourceId = '', fallback = defaultOpenAiSourceId) => String(sourceId || fallback || defaultOpenAiSourceId).trim().toLowerCase());
-    const mapPanelModeToSourceId = typeof flowRegistry.mapPanelModeToSourceId === 'function'
-      ? flowRegistry.mapPanelModeToSourceId
-      : ((panelMode = '', fallback = defaultOpenAiSourceId) => String(panelMode || fallback || defaultOpenAiSourceId).trim().toLowerCase());
+    const normalizeIntegrationTargetId = typeof flowRegistry.normalizeIntegrationTargetId === 'function'
+      ? flowRegistry.normalizeIntegrationTargetId
+      : ((_flowId, value = '', fallback = '') => String(value || fallback || '').trim().toLowerCase());
 
     function buildDefaultSettingsState() {
       return {
-        schemaVersion: 3,
+        schemaVersion: 4,
         activeFlowId: defaultFlowId,
         services: {
           account: {
@@ -71,27 +67,25 @@
         },
         flows: {
           openai: {
-            source: {
-              selected: defaultOpenAiSourceId,
-              entries: {
-                cpa: {
-                  vpsUrl: '',
-                  vpsPassword: '',
-                  localCpaStep9Mode: 'submit',
-                },
-                sub2api: {
-                  sub2apiUrl: '',
-                  sub2apiEmail: '',
-                  sub2apiPassword: '',
-                  sub2apiGroupName: 'codex',
-                  sub2apiGroupNames: ['codex', 'openai-plus'],
-                  sub2apiAccountPriority: 1,
-                  sub2apiDefaultProxyName: '',
-                },
-                codex2api: {
-                  codex2apiUrl: '',
-                  codex2apiAdminKey: '',
-                },
+            integrationTargetId: defaultOpenAiIntegrationTargetId,
+            integrationTargets: {
+              cpa: {
+                vpsUrl: '',
+                vpsPassword: '',
+                localCpaStep9Mode: 'submit',
+              },
+              sub2api: {
+                sub2apiUrl: '',
+                sub2apiEmail: '',
+                sub2apiPassword: '',
+                sub2apiGroupName: 'codex',
+                sub2apiGroupNames: ['codex', 'openai-plus'],
+                sub2apiAccountPriority: 1,
+                sub2apiDefaultProxyName: '',
+              },
+              codex2api: {
+                codex2apiUrl: '',
+                codex2apiAdminKey: '',
               },
             },
             signup: {
@@ -112,20 +106,12 @@
             },
           },
           kiro: {
-            source: {
-              selected: defaultKiroSourceId,
-              entries: {
-                'kiro-rs': {
-                  kiroRsUrl: defaultKiroRsUrl,
-                  kiroRsKey: '',
-                },
+            integrationTargetId: defaultKiroIntegrationTargetId,
+            integrationTargets: {
+              'kiro-rs': {
+                baseUrl: defaultKiroRsUrl,
+                apiKey: '',
               },
-            },
-            options: {
-              kiroRsPriority: 0,
-              kiroRsEndpoint: '',
-              kiroRsAuthRegion: '',
-              kiroRsApiRegion: '',
             },
             autoRun: {
               stepExecutionRange: {
@@ -139,7 +125,7 @@
       };
     }
 
-    function getSourceValue(settingsState, pathGetter, fallback = {}) {
+    function getIntegrationTargetValue(settingsState, pathGetter, fallback = {}) {
       return cloneValue(pathGetter(isPlainObject(settingsState) ? settingsState : {}) || fallback);
     }
 
@@ -155,20 +141,21 @@
         ?? defaults.activeFlowId,
         defaults.activeFlowId
       );
-      const openaiSelectedSource = normalizeSourceId(
+      const openaiIntegrationTargetId = normalizeIntegrationTargetId(
         'openai',
-        nested?.flows?.openai?.source?.selected
+        nested?.flows?.openai?.integrationTargetId
+          ?? input?.openaiIntegrationTargetId
           ?? input?.panelMode
-          ?? input?.openaiSourceId
-          ?? defaults.flows.openai.source.selected,
-        defaults.flows.openai.source.selected
+          ?? defaults.flows.openai.integrationTargetId,
+        defaults.flows.openai.integrationTargetId
       );
-      const kiroSelectedSource = normalizeSourceId(
+      const kiroIntegrationTargetId = normalizeIntegrationTargetId(
         'kiro',
-        nested?.flows?.kiro?.source?.selected
+        nested?.flows?.kiro?.integrationTargetId
+          ?? input?.kiroIntegrationTargetId
           ?? input?.kiroSourceId
-          ?? defaults.flows.kiro.source.selected,
-        defaults.flows.kiro.source.selected
+          ?? defaults.flows.kiro.integrationTargetId,
+        defaults.flows.kiro.integrationTargetId
       );
       const stepExecutionRangeByFlow = isPlainObject(input?.stepExecutionRangeByFlow)
         ? input.stepExecutionRangeByFlow
@@ -206,58 +193,115 @@
             customPassword: String(
               input?.customPassword
               ?? nested?.services?.account?.customPassword
-              ?? nested?.flows?.openai?.account?.customPassword
               ?? defaults.services.account.customPassword
             ).trim(),
           },
         },
         flows: {
           openai: {
-            source: {
-              selected: openaiSelectedSource,
-              entries: {
-                cpa: {
-                  ...defaults.flows.openai.source.entries.cpa,
-                  ...getSourceValue(nested, (state) => state.flows?.openai?.source?.entries?.cpa),
-                  vpsUrl: String(input?.vpsUrl ?? nested?.flows?.openai?.source?.entries?.cpa?.vpsUrl ?? '').trim(),
-                  vpsPassword: String(input?.vpsPassword ?? nested?.flows?.openai?.source?.entries?.cpa?.vpsPassword ?? ''),
-                  localCpaStep9Mode: String(
-                    input?.localCpaStep9Mode
-                    ?? nested?.flows?.openai?.source?.entries?.cpa?.localCpaStep9Mode
-                    ?? defaults.flows.openai.source.entries.cpa.localCpaStep9Mode
-                  ).trim() || defaults.flows.openai.source.entries.cpa.localCpaStep9Mode,
-                },
-                sub2api: {
-                  ...defaults.flows.openai.source.entries.sub2api,
-                  ...getSourceValue(nested, (state) => state.flows?.openai?.source?.entries?.sub2api),
-                  sub2apiUrl: String(input?.sub2apiUrl ?? nested?.flows?.openai?.source?.entries?.sub2api?.sub2apiUrl ?? '').trim(),
-                  sub2apiEmail: String(input?.sub2apiEmail ?? nested?.flows?.openai?.source?.entries?.sub2api?.sub2apiEmail ?? '').trim(),
-                  sub2apiPassword: String(input?.sub2apiPassword ?? nested?.flows?.openai?.source?.entries?.sub2api?.sub2apiPassword ?? ''),
-                  sub2apiGroupName: String(input?.sub2apiGroupName ?? nested?.flows?.openai?.source?.entries?.sub2api?.sub2apiGroupName ?? defaults.flows.openai.source.entries.sub2api.sub2apiGroupName).trim() || defaults.flows.openai.source.entries.sub2api.sub2apiGroupName,
-                  sub2apiGroupNames: Array.isArray(input?.sub2apiGroupNames)
-                    ? input.sub2apiGroupNames.map((entry) => String(entry || '').trim()).filter(Boolean)
-                    : (Array.isArray(nested?.flows?.openai?.source?.entries?.sub2api?.sub2apiGroupNames)
-                      ? nested.flows.openai.source.entries.sub2api.sub2apiGroupNames.map((entry) => String(entry || '').trim()).filter(Boolean)
-                      : [...defaults.flows.openai.source.entries.sub2api.sub2apiGroupNames]),
-                  sub2apiAccountPriority: Math.max(1, Number(input?.sub2apiAccountPriority ?? nested?.flows?.openai?.source?.entries?.sub2api?.sub2apiAccountPriority ?? defaults.flows.openai.source.entries.sub2api.sub2apiAccountPriority) || defaults.flows.openai.source.entries.sub2api.sub2apiAccountPriority),
-                  sub2apiDefaultProxyName: String(input?.sub2apiDefaultProxyName ?? nested?.flows?.openai?.source?.entries?.sub2api?.sub2apiDefaultProxyName ?? '').trim(),
-                },
-                codex2api: {
-                  ...defaults.flows.openai.source.entries.codex2api,
-                  ...getSourceValue(nested, (state) => state.flows?.openai?.source?.entries?.codex2api),
-                  codex2apiUrl: String(input?.codex2apiUrl ?? nested?.flows?.openai?.source?.entries?.codex2api?.codex2apiUrl ?? '').trim(),
-                  codex2apiAdminKey: String(input?.codex2apiAdminKey ?? nested?.flows?.openai?.source?.entries?.codex2api?.codex2apiAdminKey ?? '').trim(),
-                },
+            integrationTargetId: openaiIntegrationTargetId,
+            integrationTargets: {
+              cpa: {
+                ...defaults.flows.openai.integrationTargets.cpa,
+                ...getIntegrationTargetValue(nested, (state) => state.flows?.openai?.integrationTargets?.cpa),
+                vpsUrl: String(
+                  input?.vpsUrl
+                  ?? nested?.flows?.openai?.integrationTargets?.cpa?.vpsUrl
+                  ?? ''
+                ).trim(),
+                vpsPassword: String(
+                  input?.vpsPassword
+                  ?? nested?.flows?.openai?.integrationTargets?.cpa?.vpsPassword
+                  ?? ''
+                ),
+                localCpaStep9Mode: String(
+                  input?.localCpaStep9Mode
+                  ?? nested?.flows?.openai?.integrationTargets?.cpa?.localCpaStep9Mode
+                  ?? defaults.flows.openai.integrationTargets.cpa.localCpaStep9Mode
+                ).trim() || defaults.flows.openai.integrationTargets.cpa.localCpaStep9Mode,
+              },
+              sub2api: {
+                ...defaults.flows.openai.integrationTargets.sub2api,
+                ...getIntegrationTargetValue(nested, (state) => state.flows?.openai?.integrationTargets?.sub2api),
+                sub2apiUrl: String(
+                  input?.sub2apiUrl
+                  ?? nested?.flows?.openai?.integrationTargets?.sub2api?.sub2apiUrl
+                  ?? ''
+                ).trim(),
+                sub2apiEmail: String(
+                  input?.sub2apiEmail
+                  ?? nested?.flows?.openai?.integrationTargets?.sub2api?.sub2apiEmail
+                  ?? ''
+                ).trim(),
+                sub2apiPassword: String(
+                  input?.sub2apiPassword
+                  ?? nested?.flows?.openai?.integrationTargets?.sub2api?.sub2apiPassword
+                  ?? ''
+                ),
+                sub2apiGroupName: String(
+                  input?.sub2apiGroupName
+                  ?? nested?.flows?.openai?.integrationTargets?.sub2api?.sub2apiGroupName
+                  ?? defaults.flows.openai.integrationTargets.sub2api.sub2apiGroupName
+                ).trim() || defaults.flows.openai.integrationTargets.sub2api.sub2apiGroupName,
+                sub2apiGroupNames: Array.isArray(input?.sub2apiGroupNames)
+                  ? input.sub2apiGroupNames.map((entry) => String(entry || '').trim()).filter(Boolean)
+                  : (Array.isArray(nested?.flows?.openai?.integrationTargets?.sub2api?.sub2apiGroupNames)
+                    ? nested.flows.openai.integrationTargets.sub2api.sub2apiGroupNames.map((entry) => String(entry || '').trim()).filter(Boolean)
+                    : [...defaults.flows.openai.integrationTargets.sub2api.sub2apiGroupNames]),
+                sub2apiAccountPriority: Math.max(1, Number(
+                  input?.sub2apiAccountPriority
+                  ?? nested?.flows?.openai?.integrationTargets?.sub2api?.sub2apiAccountPriority
+                  ?? defaults.flows.openai.integrationTargets.sub2api.sub2apiAccountPriority
+                ) || defaults.flows.openai.integrationTargets.sub2api.sub2apiAccountPriority),
+                sub2apiDefaultProxyName: String(
+                  input?.sub2apiDefaultProxyName
+                  ?? nested?.flows?.openai?.integrationTargets?.sub2api?.sub2apiDefaultProxyName
+                  ?? ''
+                ).trim(),
+              },
+              codex2api: {
+                ...defaults.flows.openai.integrationTargets.codex2api,
+                ...getIntegrationTargetValue(nested, (state) => state.flows?.openai?.integrationTargets?.codex2api),
+                codex2apiUrl: String(
+                  input?.codex2apiUrl
+                  ?? nested?.flows?.openai?.integrationTargets?.codex2api?.codex2apiUrl
+                  ?? ''
+                ).trim(),
+                codex2apiAdminKey: String(
+                  input?.codex2apiAdminKey
+                  ?? nested?.flows?.openai?.integrationTargets?.codex2api?.codex2apiAdminKey
+                  ?? ''
+                ).trim(),
               },
             },
             signup: {
-              signupMethod: String(input?.signupMethod ?? nested?.flows?.openai?.signup?.signupMethod ?? defaults.flows.openai.signup.signupMethod).trim().toLowerCase() === 'phone' ? 'phone' : 'email',
-              phoneVerificationEnabled: Boolean(input?.phoneVerificationEnabled ?? nested?.flows?.openai?.signup?.phoneVerificationEnabled ?? defaults.flows.openai.signup.phoneVerificationEnabled),
-              phoneSignupReloginAfterBindEmailEnabled: Boolean(input?.phoneSignupReloginAfterBindEmailEnabled ?? nested?.flows?.openai?.signup?.phoneSignupReloginAfterBindEmailEnabled ?? defaults.flows.openai.signup.phoneSignupReloginAfterBindEmailEnabled),
+              signupMethod: String(
+                input?.signupMethod
+                ?? nested?.flows?.openai?.signup?.signupMethod
+                ?? defaults.flows.openai.signup.signupMethod
+              ).trim().toLowerCase() === 'phone' ? 'phone' : 'email',
+              phoneVerificationEnabled: Boolean(
+                input?.phoneVerificationEnabled
+                ?? nested?.flows?.openai?.signup?.phoneVerificationEnabled
+                ?? defaults.flows.openai.signup.phoneVerificationEnabled
+              ),
+              phoneSignupReloginAfterBindEmailEnabled: Boolean(
+                input?.phoneSignupReloginAfterBindEmailEnabled
+                ?? nested?.flows?.openai?.signup?.phoneSignupReloginAfterBindEmailEnabled
+                ?? defaults.flows.openai.signup.phoneSignupReloginAfterBindEmailEnabled
+              ),
             },
             plus: {
-              plusModeEnabled: Boolean(input?.plusModeEnabled ?? nested?.flows?.openai?.plus?.plusModeEnabled ?? defaults.flows.openai.plus.plusModeEnabled),
-              plusPaymentMethod: String(input?.plusPaymentMethod ?? nested?.flows?.openai?.plus?.plusPaymentMethod ?? defaults.flows.openai.plus.plusPaymentMethod).trim() || defaults.flows.openai.plus.plusPaymentMethod,
+              plusModeEnabled: Boolean(
+                input?.plusModeEnabled
+                ?? nested?.flows?.openai?.plus?.plusModeEnabled
+                ?? defaults.flows.openai.plus.plusModeEnabled
+              ),
+              plusPaymentMethod: String(
+                input?.plusPaymentMethod
+                ?? nested?.flows?.openai?.plus?.plusPaymentMethod
+                ?? defaults.flows.openai.plus.plusPaymentMethod
+              ).trim() || defaults.flows.openai.plus.plusPaymentMethod,
             },
             autoRun: {
               stepExecutionRange: normalizeStepExecutionRangeEntry(
@@ -269,46 +313,24 @@
             },
           },
           kiro: {
-            source: {
-              selected: kiroSelectedSource,
-              entries: {
-                'kiro-rs': {
-                  ...defaults.flows.kiro.source.entries['kiro-rs'],
-                  ...getSourceValue(nested, (state) => state.flows?.kiro?.source?.entries?.['kiro-rs']),
-                  kiroRsUrl: String(
-                    input?.kiroRsUrl
-                    ?? nested?.flows?.kiro?.source?.entries?.['kiro-rs']?.kiroRsUrl
-                    ?? defaults.flows.kiro.source.entries['kiro-rs'].kiroRsUrl
-                  ).trim() || defaults.flows.kiro.source.entries['kiro-rs'].kiroRsUrl,
-                  kiroRsKey: String(
-                    input?.kiroRsKey
-                    ?? nested?.flows?.kiro?.source?.entries?.['kiro-rs']?.kiroRsKey
-                    ?? defaults.flows.kiro.source.entries['kiro-rs'].kiroRsKey
-                  ),
-                },
+            integrationTargetId: kiroIntegrationTargetId,
+            integrationTargets: {
+              'kiro-rs': {
+                ...defaults.flows.kiro.integrationTargets['kiro-rs'],
+                ...getIntegrationTargetValue(nested, (state) => state.flows?.kiro?.integrationTargets?.['kiro-rs']),
+                baseUrl: String(
+                  input?.kiroRsUrl
+                  ?? input?.kiroRsBaseUrl
+                  ?? nested?.flows?.kiro?.integrationTargets?.['kiro-rs']?.baseUrl
+                  ?? defaults.flows.kiro.integrationTargets['kiro-rs'].baseUrl
+                ).trim() || defaults.flows.kiro.integrationTargets['kiro-rs'].baseUrl,
+                apiKey: String(
+                  input?.kiroRsKey
+                  ?? input?.kiroRsApiKey
+                  ?? nested?.flows?.kiro?.integrationTargets?.['kiro-rs']?.apiKey
+                  ?? defaults.flows.kiro.integrationTargets['kiro-rs'].apiKey
+                ),
               },
-            },
-            options: {
-              kiroRsPriority: Number(
-                input?.kiroRsPriority
-                ?? nested?.flows?.kiro?.options?.kiroRsPriority
-                ?? defaults.flows.kiro.options.kiroRsPriority
-              ) || 0,
-              kiroRsEndpoint: String(
-                input?.kiroRsEndpoint
-                ?? nested?.flows?.kiro?.options?.kiroRsEndpoint
-                ?? defaults.flows.kiro.options.kiroRsEndpoint
-              ).trim(),
-              kiroRsAuthRegion: String(
-                input?.kiroRsAuthRegion
-                ?? nested?.flows?.kiro?.options?.kiroRsAuthRegion
-                ?? defaults.flows.kiro.options.kiroRsAuthRegion
-              ).trim(),
-              kiroRsApiRegion: String(
-                input?.kiroRsApiRegion
-                ?? nested?.flows?.kiro?.options?.kiroRsApiRegion
-                ?? defaults.flows.kiro.options.kiroRsApiRegion
-              ).trim(),
             },
             autoRun: {
               stepExecutionRange: normalizeStepExecutionRangeEntry(
@@ -321,6 +343,53 @@
           },
         },
       };
+    }
+
+    function mergeSettingsState(baseValue = {}, patchValue = {}) {
+      const baseSettingsState = normalizeSettingsState(baseValue);
+      const patchSettingsState = normalizeSettingsState({
+        settingsState: patchValue,
+        activeFlowId: patchValue?.activeFlowId ?? baseSettingsState.activeFlowId,
+      });
+
+      function mergeRecursive(baseNode, patchNode) {
+        if (Array.isArray(patchNode)) {
+          return patchNode.map((entry) => cloneValue(entry));
+        }
+        if (!isPlainObject(patchNode)) {
+          return patchNode === undefined ? cloneValue(baseNode) : patchNode;
+        }
+        const next = {
+          ...cloneValue(isPlainObject(baseNode) ? baseNode : {}),
+        };
+        Object.entries(patchNode).forEach(([key, value]) => {
+          next[key] = mergeRecursive(baseNode?.[key], value);
+        });
+        return next;
+      }
+
+      return normalizeSettingsState({
+        settingsState: mergeRecursive(baseSettingsState, patchSettingsState),
+      });
+    }
+
+    function getFlowSettings(settingsState = {}, flowId) {
+      const normalizedState = normalizeSettingsState(settingsState);
+      const normalizedFlowId = normalizeFlowId(flowId, normalizedState.activeFlowId);
+      return cloneValue(normalizedState?.flows?.[normalizedFlowId] || {});
+    }
+
+    function getSelectedIntegrationTargetId(settingsState = {}, flowId) {
+      const normalizedState = normalizeSettingsState(settingsState);
+      const normalizedFlowId = normalizeFlowId(flowId, normalizedState.activeFlowId);
+      const flowSettings = normalizedState?.flows?.[normalizedFlowId] || {};
+      return normalizeIntegrationTargetId(
+        normalizedFlowId,
+        flowSettings?.integrationTargetId,
+        normalizedFlowId === 'kiro'
+          ? defaultKiroIntegrationTargetId
+          : defaultOpenAiIntegrationTargetId
+      );
     }
 
     function buildStepExecutionRangeByFlow(settingsState = {}) {
@@ -337,23 +406,7 @@
       };
     }
 
-    function getFlowSettings(settingsState = {}, flowId) {
-      const normalizedState = normalizeSettingsState(settingsState);
-      const normalizedFlowId = normalizeFlowId(flowId, normalizedState.activeFlowId);
-      return cloneValue(normalizedState?.flows?.[normalizedFlowId] || {});
-    }
-
-    function getSelectedSourceId(settingsState = {}, flowId) {
-      const flowSettings = getFlowSettings(settingsState, flowId);
-      const normalizedFlowId = normalizeFlowId(flowId, normalizeSettingsState(settingsState).activeFlowId);
-      return normalizeSourceId(
-        normalizedFlowId,
-        flowSettings?.source?.selected,
-        normalizedFlowId === 'kiro' ? defaultKiroSourceId : defaultOpenAiSourceId
-      );
-    }
-
-    function buildLegacySettingsPayload(settingsState = {}, baseInput = {}) {
+    function buildSettingsView(settingsState = {}, baseInput = {}) {
       const normalizedState = normalizeSettingsState(settingsState);
       const next = {
         ...(isPlainObject(baseInput) ? cloneValue(baseInput) : {}),
@@ -361,20 +414,22 @@
       const openaiState = normalizedState.flows.openai;
       const kiroState = normalizedState.flows.kiro;
       next.activeFlowId = normalizedState.activeFlowId;
-      next.panelMode = mapSourceIdToPanelMode('openai', openaiState.source.selected, defaultOpenAiSourceId);
-      next.kiroSourceId = getSelectedSourceId(normalizedState, 'kiro');
-      next.vpsUrl = openaiState.source.entries.cpa.vpsUrl;
-      next.vpsPassword = openaiState.source.entries.cpa.vpsPassword;
-      next.localCpaStep9Mode = openaiState.source.entries.cpa.localCpaStep9Mode;
-      next.sub2apiUrl = openaiState.source.entries.sub2api.sub2apiUrl;
-      next.sub2apiEmail = openaiState.source.entries.sub2api.sub2apiEmail;
-      next.sub2apiPassword = openaiState.source.entries.sub2api.sub2apiPassword;
-      next.sub2apiGroupName = openaiState.source.entries.sub2api.sub2apiGroupName;
-      next.sub2apiGroupNames = cloneValue(openaiState.source.entries.sub2api.sub2apiGroupNames);
-      next.sub2apiAccountPriority = openaiState.source.entries.sub2api.sub2apiAccountPriority;
-      next.sub2apiDefaultProxyName = openaiState.source.entries.sub2api.sub2apiDefaultProxyName;
-      next.codex2apiUrl = openaiState.source.entries.codex2api.codex2apiUrl;
-      next.codex2apiAdminKey = openaiState.source.entries.codex2api.codex2apiAdminKey;
+      next.openaiIntegrationTargetId = getSelectedIntegrationTargetId(normalizedState, 'openai');
+      next.kiroIntegrationTargetId = getSelectedIntegrationTargetId(normalizedState, 'kiro');
+      next.panelMode = next.openaiIntegrationTargetId;
+      next.kiroSourceId = next.kiroIntegrationTargetId;
+      next.vpsUrl = openaiState.integrationTargets.cpa.vpsUrl;
+      next.vpsPassword = openaiState.integrationTargets.cpa.vpsPassword;
+      next.localCpaStep9Mode = openaiState.integrationTargets.cpa.localCpaStep9Mode;
+      next.sub2apiUrl = openaiState.integrationTargets.sub2api.sub2apiUrl;
+      next.sub2apiEmail = openaiState.integrationTargets.sub2api.sub2apiEmail;
+      next.sub2apiPassword = openaiState.integrationTargets.sub2api.sub2apiPassword;
+      next.sub2apiGroupName = openaiState.integrationTargets.sub2api.sub2apiGroupName;
+      next.sub2apiGroupNames = cloneValue(openaiState.integrationTargets.sub2api.sub2apiGroupNames);
+      next.sub2apiAccountPriority = openaiState.integrationTargets.sub2api.sub2apiAccountPriority;
+      next.sub2apiDefaultProxyName = openaiState.integrationTargets.sub2api.sub2apiDefaultProxyName;
+      next.codex2apiUrl = openaiState.integrationTargets.codex2api.codex2apiUrl;
+      next.codex2apiAdminKey = openaiState.integrationTargets.codex2api.codex2apiAdminKey;
       next.customPassword = normalizedState.services.account.customPassword;
       next.signupMethod = openaiState.signup.signupMethod;
       next.phoneVerificationEnabled = openaiState.signup.phoneVerificationEnabled;
@@ -385,13 +440,8 @@
       next.ipProxyEnabled = normalizedState.services.proxy.enabled;
       next.ipProxyService = normalizedState.services.proxy.provider;
       next.ipProxyMode = normalizedState.services.proxy.mode;
-      next.kiroRsUrl = kiroState.source.entries['kiro-rs'].kiroRsUrl;
-      next.kiroRsKey = kiroState.source.entries['kiro-rs'].kiroRsKey;
-      next.kiroRsPriority = kiroState.options.kiroRsPriority;
-      next.kiroRsEndpoint = kiroState.options.kiroRsEndpoint;
-      next.kiroRsAuthRegion = kiroState.options.kiroRsAuthRegion;
-      next.kiroRsApiRegion = kiroState.options.kiroRsApiRegion;
-      delete next.kiroRegion;
+      next.kiroRsUrl = kiroState.integrationTargets['kiro-rs'].baseUrl;
+      next.kiroRsKey = kiroState.integrationTargets['kiro-rs'].apiKey;
       next.stepExecutionRangeByFlow = buildStepExecutionRangeByFlow(normalizedState);
       next.settingsSchemaVersion = normalizedState.schemaVersion;
       next.settingsState = cloneValue(normalizedState);
@@ -401,34 +451,29 @@
     function getFlowInputState(settingsState = {}, flowId) {
       const normalizedState = normalizeSettingsState(settingsState);
       const normalizedFlowId = normalizeFlowId(flowId, normalizedState.activeFlowId);
+      const integrationTargetId = getSelectedIntegrationTargetId(normalizedState, normalizedFlowId);
       if (normalizedFlowId === 'kiro') {
         return {
           activeFlowId: normalizedFlowId,
-          sourceId: getSelectedSourceId(normalizedState, 'kiro'),
-          kiroRsUrl: normalizedState.flows.kiro.source.entries['kiro-rs'].kiroRsUrl,
-          kiroRsKey: normalizedState.flows.kiro.source.entries['kiro-rs'].kiroRsKey,
+          integrationTargetId,
+          kiroRsUrl: normalizedState.flows.kiro.integrationTargets['kiro-rs'].baseUrl,
+          kiroRsKey: normalizedState.flows.kiro.integrationTargets['kiro-rs'].apiKey,
         };
       }
       return {
         activeFlowId: normalizedFlowId,
-        sourceId: getSelectedSourceId(normalizedState, 'openai'),
-        panelMode: mapSourceIdToPanelMode('openai', normalizedState.flows.openai.source.selected, defaultOpenAiSourceId),
+        integrationTargetId,
       };
-    }
-
-    function normalizeFlatInput(input = {}) {
-      const state = normalizeSettingsState(input);
-      return buildLegacySettingsPayload(state, input);
     }
 
     return {
       buildDefaultSettingsState,
-      buildLegacySettingsPayload,
+      buildSettingsView,
       buildStepExecutionRangeByFlow,
       getFlowInputState,
       getFlowSettings,
-      getSelectedSourceId,
-      normalizeFlatInput,
+      getSelectedIntegrationTargetId,
+      mergeSettingsState,
       normalizeSettingsState,
     };
   }

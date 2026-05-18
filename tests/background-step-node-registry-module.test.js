@@ -8,9 +8,8 @@ test('background node registry preserves node metadata even before an executor i
   const registry = api.createNodeRegistry([
     {
       flowId: 'kiro',
-      legacyStepId: 1,
       nodeId: 'kiro-start-device-login',
-      displayOrder: 10,
+      displayOrder: 1,
       executeKey: 'kiro-start-device-login',
       title: 'Start device login',
     },
@@ -19,7 +18,7 @@ test('background node registry preserves node metadata even before an executor i
   const node = registry.getNodeDefinition('kiro-start-device-login');
 
   assert.equal(node.flowId, 'kiro');
-  assert.equal(node.legacyStepId, 1);
+  assert.equal(node.displayOrder, 1);
   assert.equal(node.title, 'Start device login');
   assert.throws(
     () => registry.executeNode('kiro-start-device-login', {}),
@@ -34,9 +33,8 @@ test('background node registry executes registered nodes in display order', asyn
   const registry = api.createNodeRegistry([
     {
       flowId: 'openai',
-      legacyStepId: 2,
+      displayOrder: 2,
       nodeId: 'submit-signup-email',
-      displayOrder: 20,
       executeKey: 'submit-signup-email',
       title: 'Submit signup email',
       execute: async (state) => {
@@ -45,9 +43,8 @@ test('background node registry executes registered nodes in display order', asyn
     },
     {
       flowId: 'openai',
-      legacyStepId: 1,
+      displayOrder: 1,
       nodeId: 'open-chatgpt',
-      displayOrder: 10,
       executeKey: 'open-chatgpt',
       title: 'Open ChatGPT',
     },

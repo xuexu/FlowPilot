@@ -57,6 +57,39 @@ ${flowRegistrySource}
 ${settingsSchemaSource}
 const DEFAULT_ACTIVE_FLOW_ID = 'openai';
 const DEFAULT_SUB2API_GROUP_NAMES = ['codex', 'openai-plus'];
+const SETTINGS_SCHEMA_VIEW_KEYS = Object.freeze([
+  'activeFlowId',
+  'openaiIntegrationTargetId',
+  'kiroIntegrationTargetId',
+  'panelMode',
+  'kiroSourceId',
+  'vpsUrl',
+  'vpsPassword',
+  'localCpaStep9Mode',
+  'sub2apiUrl',
+  'sub2apiEmail',
+  'sub2apiPassword',
+  'sub2apiGroupName',
+  'sub2apiGroupNames',
+  'sub2apiAccountPriority',
+  'sub2apiDefaultProxyName',
+  'codex2apiUrl',
+  'codex2apiAdminKey',
+  'customPassword',
+  'signupMethod',
+  'phoneVerificationEnabled',
+  'phoneSignupReloginAfterBindEmailEnabled',
+  'plusModeEnabled',
+  'plusPaymentMethod',
+  'mailProvider',
+  'ipProxyEnabled',
+  'ipProxyService',
+  'ipProxyMode',
+  'kiroRsUrl',
+  'kiroRsKey',
+  'stepExecutionRangeByFlow',
+]);
+const SETTINGS_SCHEMA_VIEW_KEY_SET = new Set(SETTINGS_SCHEMA_VIEW_KEYS);
 const PERSISTED_SETTING_DEFAULTS = {
   activeFlowId: DEFAULT_ACTIVE_FLOW_ID,
   panelMode: 'cpa',
@@ -77,6 +110,9 @@ const PERSISTED_SETTING_KEYS = Object.keys(PERSISTED_SETTING_DEFAULTS);
 const PERSISTED_SETTINGS_SCHEMA_KEYS = ['settingsSchemaVersion', 'settingsState'];
 const LEGACY_AUTO_STEP_DELAY_KEYS = [];
 const LEGACY_VERIFICATION_RESEND_COUNT_KEYS = [];
+function isPlainObjectValue(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
 function normalizePanelMode(value = '') {
   const normalized = String(value || '').trim().toLowerCase();
   return normalized === 'sub2api' || normalized === 'codex2api' ? normalized : 'cpa';
@@ -131,6 +167,8 @@ function resolveSignupMethod(state = {}) {
 function resolveLegacyAutoStepDelaySeconds() { return undefined; }
 ${extractFunction('normalizePersistentSettingValue')}
 ${extractFunction('getSettingsSchemaApi')}
+${extractFunction('projectSettingsSchemaView')}
+${extractFunction('buildPersistedSettingsStoragePayload')}
 ${extractFunction('buildPersistentSettingsPayload')}
 ${extractFunction('getPersistedSettings')}
 ${extractFunction('setPersistentSettings')}
@@ -141,6 +179,7 @@ return {
   setPersistentSettings,
   getRequestedKeys: typeof getRequestedKeys === 'function' ? getRequestedKeys : () => [],
   getPersistedWrites: typeof getPersistedWrites === 'function' ? getPersistedWrites : () => [],
+  getRemovedKeys: typeof getRemovedKeys === 'function' ? getRemovedKeys : () => [],
 };
 `)();
 }
@@ -159,26 +198,50 @@ test('buildPersistentSettingsPayload writes canonical settings schema into persi
   assert.equal(payload.kiroRsUrl, 'https://kiro.example.com/admin');
   assert.equal(payload.kiroRsKey, 'secret-key');
   assert.equal(Object.prototype.hasOwnProperty.call(payload, 'kiroRegion'), false);
-  assert.equal(payload.settingsSchemaVersion, 3);
+  assert.equal(payload.settingsSchemaVersion, 4);
   assert.equal(payload.settingsState.activeFlowId, 'kiro');
-  assert.equal(payload.settingsState.flows.kiro.source.selected, 'kiro-rs');
+  assert.equal(payload.settingsState.flows.kiro.integrationTargetId, 'kiro-rs');
+  assert.equal(
+    payload.settingsState.flows.kiro.integrationTargets['kiro-rs'].baseUrl,
+    'https://kiro.example.com/admin'
+  );
 });
 
 test('buildPersistentSettingsPayload accepts schema-only input when requireKnownKeys is enabled', () => {
   const api = buildHarness();
 
   const payload = api.buildPersistentSettingsPayload({
-    settingsSchemaVersion: 3,
+    settingsSchemaVersion: 4,
     settingsState: {
       activeFlowId: 'kiro',
       services: {
+        account: { customPassword: '' },
         email: { provider: '163' },
         proxy: { enabled: false, provider: '711proxy', mode: 'account' },
       },
       flows: {
         openai: {
-          source: { selected: 'cpa', entries: {} },
-          account: { customPassword: '' },
+          integrationTargetId: 'cpa',
+          integrationTargets: {
+            cpa: {
+              vpsUrl: '',
+              vpsPassword: '',
+              localCpaStep9Mode: 'submit',
+            },
+            sub2api: {
+              sub2apiUrl: '',
+              sub2apiEmail: '',
+              sub2apiPassword: '',
+              sub2apiGroupName: 'codex',
+              sub2apiGroupNames: ['codex', 'openai-plus'],
+              sub2apiAccountPriority: 1,
+              sub2apiDefaultProxyName: '',
+            },
+            codex2api: {
+              codex2apiUrl: '',
+              codex2apiAdminKey: '',
+            },
+          },
           signup: {
             signupMethod: 'email',
             phoneVerificationEnabled: false,
@@ -193,16 +256,12 @@ test('buildPersistentSettingsPayload accepts schema-only input when requireKnown
           },
         },
         kiro: {
-          source: {
-            selected: 'kiro-rs',
-            entries: {
-              'kiro-rs': {
-                kiroRsUrl: 'https://kiro.example.com/admin',
-                kiroRsKey: 'schema-only-key',
-              },
+          integrationTargetId: 'kiro-rs',
+          integrationTargets: {
+            'kiro-rs': {
+              baseUrl: 'https://kiro.example.com/admin',
+              apiKey: 'schema-only-key',
             },
-          },
-          options: {
           },
           autoRun: {
             stepExecutionRange: { enabled: true, fromStep: 1, toStep: 7 },
@@ -217,7 +276,7 @@ test('buildPersistentSettingsPayload accepts schema-only input when requireKnown
   assert.equal(payload.kiroRsUrl, 'https://kiro.example.com/admin');
   assert.equal(payload.kiroRsKey, 'schema-only-key');
   assert.equal(Object.prototype.hasOwnProperty.call(payload, 'kiroRegion'), false);
-  assert.equal(payload.settingsSchemaVersion, 3);
+  assert.equal(payload.settingsSchemaVersion, 4);
 });
 
 test('getPersistedSettings reads schema keys alongside legacy flat settings keys', async () => {
@@ -242,7 +301,7 @@ function getRequestedKeys() {
 
   assert.ok(api.getRequestedKeys().includes('settingsSchemaVersion'));
   assert.ok(api.getRequestedKeys().includes('settingsState'));
-  assert.equal(state.settingsSchemaVersion, 3);
+  assert.equal(state.settingsSchemaVersion, 4);
   assert.equal(state.settingsState.activeFlowId, 'openai');
 });
 
@@ -253,20 +312,37 @@ const chrome = {
     local: {
       async get() {
         return {
-          settingsSchemaVersion: 3,
+          settingsSchemaVersion: 4,
           settingsState: {
             activeFlowId: 'kiro',
             services: {
+              account: { customPassword: '' },
               email: { provider: 'hotmail' },
               proxy: { enabled: true, provider: '711proxy', mode: 'account' },
             },
             flows: {
               openai: {
-                source: {
-                  selected: 'sub2api',
-                  entries: {},
+                integrationTargetId: 'sub2api',
+                integrationTargets: {
+                  cpa: {
+                    vpsUrl: '',
+                    vpsPassword: '',
+                    localCpaStep9Mode: 'submit',
+                  },
+                  sub2api: {
+                    sub2apiUrl: '',
+                    sub2apiEmail: '',
+                    sub2apiPassword: '',
+                    sub2apiGroupName: 'codex',
+                    sub2apiGroupNames: ['codex', 'openai-plus'],
+                    sub2apiAccountPriority: 1,
+                    sub2apiDefaultProxyName: '',
+                  },
+                  codex2api: {
+                    codex2apiUrl: '',
+                    codex2apiAdminKey: '',
+                  },
                 },
-                account: { customPassword: '' },
                 signup: {
                   signupMethod: 'email',
                   phoneVerificationEnabled: false,
@@ -281,16 +357,12 @@ const chrome = {
                 },
               },
               kiro: {
-                source: {
-                  selected: 'kiro-rs',
-                  entries: {
-                    'kiro-rs': {
-                      kiroRsUrl: 'https://kiro.example.com/admin',
-                      kiroRsKey: 'stored-key',
-                    },
+                integrationTargetId: 'kiro-rs',
+                integrationTargets: {
+                  'kiro-rs': {
+                    baseUrl: 'https://kiro.example.com/admin',
+                    apiKey: 'stored-key',
                   },
-                },
-                options: {
                 },
                 autoRun: {
                   stepExecutionRange: { enabled: true, fromStep: 1, toStep: 7 },
@@ -324,11 +396,15 @@ const chrome = {
 test('setPersistentSettings materializes canonical schema keys for schema-only updates', async () => {
   const api = buildHarness(`
 const persistedWrites = [];
+const removedKeys = [];
 const chrome = {
   storage: {
     local: {
       async get() {
         return {};
+      },
+      async remove(keys) {
+        removedKeys.push(...(Array.isArray(keys) ? keys : [keys]));
       },
       async set(payload) {
         persistedWrites.push(JSON.parse(JSON.stringify(payload)));
@@ -339,20 +415,43 @@ const chrome = {
 function getPersistedWrites() {
   return persistedWrites;
 }
+function getRemovedKeys() {
+  return removedKeys;
+}
 `);
 
   const persisted = await api.setPersistentSettings({
-    settingsSchemaVersion: 3,
+    settingsSchemaVersion: 4,
     settingsState: {
       activeFlowId: 'kiro',
       services: {
+        account: { customPassword: '' },
         email: { provider: '163' },
         proxy: { enabled: false, provider: '711proxy', mode: 'account' },
       },
       flows: {
         openai: {
-          source: { selected: 'cpa', entries: {} },
-          account: { customPassword: '' },
+          integrationTargetId: 'cpa',
+          integrationTargets: {
+            cpa: {
+              vpsUrl: '',
+              vpsPassword: '',
+              localCpaStep9Mode: 'submit',
+            },
+            sub2api: {
+              sub2apiUrl: '',
+              sub2apiEmail: '',
+              sub2apiPassword: '',
+              sub2apiGroupName: 'codex',
+              sub2apiGroupNames: ['codex', 'openai-plus'],
+              sub2apiAccountPriority: 1,
+              sub2apiDefaultProxyName: '',
+            },
+            codex2api: {
+              codex2apiUrl: '',
+              codex2apiAdminKey: '',
+            },
+          },
           signup: {
             signupMethod: 'email',
             phoneVerificationEnabled: false,
@@ -367,16 +466,12 @@ function getPersistedWrites() {
           },
         },
         kiro: {
-          source: {
-            selected: 'kiro-rs',
-            entries: {
-              'kiro-rs': {
-                kiroRsUrl: 'https://kiro.example.com/admin',
-                kiroRsKey: 'nested-only-key',
-              },
+          integrationTargetId: 'kiro-rs',
+          integrationTargets: {
+            'kiro-rs': {
+              baseUrl: 'https://kiro.example.com/admin',
+              apiKey: 'nested-only-key',
             },
-          },
-          options: {
           },
           autoRun: {
             stepExecutionRange: { enabled: true, fromStep: 1, toStep: 7 },
@@ -392,11 +487,14 @@ function getPersistedWrites() {
   assert.equal(persisted.kiroRsUrl, 'https://kiro.example.com/admin');
   assert.equal(persisted.kiroRsKey, 'nested-only-key');
   assert.equal(Object.prototype.hasOwnProperty.call(persisted, 'kiroRegion'), false);
-  assert.equal(persisted.settingsSchemaVersion, 3);
-  assert.equal(write.activeFlowId, 'kiro');
-  assert.equal(write.kiroRsUrl, 'https://kiro.example.com/admin');
-  assert.equal(write.kiroRsKey, 'nested-only-key');
+  assert.equal(persisted.settingsSchemaVersion, 4);
+  assert.equal(Object.prototype.hasOwnProperty.call(write, 'activeFlowId'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(write, 'kiroRsUrl'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(write, 'kiroRsKey'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(write, 'kiroRegion'), false);
-  assert.equal(write.settingsSchemaVersion, 3);
+  assert.equal(write.settingsSchemaVersion, 4);
   assert.equal(write.settingsState.activeFlowId, 'kiro');
+  assert.equal(write.settingsState.flows.kiro.integrationTargetId, 'kiro-rs');
+  assert.ok(api.getRemovedKeys().includes('panelMode'));
+  assert.ok(api.getRemovedKeys().includes('kiroRsUrl'));
 });

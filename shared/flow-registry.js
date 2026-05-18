@@ -2,11 +2,11 @@
   root.MultiPageFlowRegistry = factory();
 })(typeof self !== 'undefined' ? self : globalThis, function createFlowRegistryModule() {
   const DEFAULT_FLOW_ID = 'openai';
-  const LEGACY_OPENAI_FLOW_ALIAS = 'codex';
-  const DEFAULT_OPENAI_SOURCE_ID = 'cpa';
-  const DEFAULT_KIRO_SOURCE_ID = 'kiro-rs';
+  const DEFAULT_OPENAI_INTEGRATION_TARGET_ID = 'cpa';
+  const DEFAULT_KIRO_INTEGRATION_TARGET_ID = 'kiro-rs';
+  const DEFAULT_KIRO_PUBLICATION_TARGET_ID = 'kiro-rs';
   const DEFAULT_KIRO_RS_URL = 'https://kiro.leftcode.xyz/admin';
-  const OPENAI_SOURCE_IDS = Object.freeze(['cpa', 'sub2api', 'codex2api']);
+  const OPENAI_INTEGRATION_TARGET_IDS = Object.freeze(['cpa', 'sub2api', 'codex2api']);
   const SHARED_SERVICE_IDS = Object.freeze(['account', 'email', 'proxy']);
 
   const DEFAULT_FLOW_CAPABILITIES = Object.freeze({
@@ -15,7 +15,7 @@
     supportsPhoneVerificationSettings: false,
     supportsPlusMode: false,
     supportsContributionMode: false,
-    supportsPlatformBinding: [],
+    supportedIntegrationTargets: [],
     supportsLuckmail: false,
     supportsOauthTimeoutBudget: false,
     canSwitchFlow: true,
@@ -44,7 +44,7 @@
         supportsPhoneVerificationSettings: true,
         supportsPlusMode: true,
         supportsContributionMode: true,
-        supportsPlatformBinding: [...OPENAI_SOURCE_IDS],
+        supportedIntegrationTargets: [...OPENAI_INTEGRATION_TARGET_IDS],
         supportsLuckmail: true,
         supportsOauthTimeoutBudget: true,
         stepDefinitionMode: 'openai-dynamic',
@@ -55,24 +55,21 @@
         'openai-oauth',
         'openai-step6',
       ],
-      sources: {
+      integrationTargets: {
         cpa: {
           id: 'cpa',
           label: 'CPA 面板',
-          legacyPanelMode: 'cpa',
-          groups: ['openai-source-cpa'],
+          groups: ['openai-target-cpa'],
         },
         sub2api: {
           id: 'sub2api',
           label: 'SUB2API',
-          legacyPanelMode: 'sub2api',
-          groups: ['openai-source-sub2api'],
+          groups: ['openai-target-sub2api'],
         },
         codex2api: {
           id: 'codex2api',
           label: 'Codex2API',
-          legacyPanelMode: 'codex2api',
-          groups: ['openai-source-codex2api'],
+          groups: ['openai-target-codex2api'],
         },
       },
       runtimeSources: {
@@ -206,16 +203,23 @@
       services: ['account', 'email', 'proxy'],
       capabilities: {
         ...DEFAULT_FLOW_CAPABILITIES,
+        supportedIntegrationTargets: [DEFAULT_KIRO_INTEGRATION_TARGET_ID],
         stepDefinitionMode: 'kiro-device-auth',
       },
       baseGroups: [
         'kiro-runtime-status',
       ],
-      sources: {
+      integrationTargets: {
         'kiro-rs': {
           id: 'kiro-rs',
           label: 'kiro.rs',
-          groups: ['kiro-source-kiro-rs'],
+          groups: ['kiro-target-kiro-rs'],
+        },
+      },
+      publicationTargets: {
+        'kiro-rs': {
+          id: 'kiro-rs',
+          label: 'kiro.rs',
         },
       },
       runtimeSources: {
@@ -280,13 +284,13 @@
       label: 'IP 代理',
       sectionIds: ['ip-proxy-section'],
     },
-    'openai-source-cpa': {
-      id: 'openai-source-cpa',
+    'openai-target-cpa': {
+      id: 'openai-target-cpa',
       label: 'CPA 来源',
       rowIds: ['row-vps-url', 'row-vps-password', 'row-local-cpa-step9-mode'],
     },
-    'openai-source-sub2api': {
-      id: 'openai-source-sub2api',
+    'openai-target-sub2api': {
+      id: 'openai-target-sub2api',
       label: 'SUB2API 来源',
       rowIds: [
         'row-sub2api-url',
@@ -297,17 +301,15 @@
         'row-sub2api-default-proxy',
       ],
     },
-    'openai-source-codex2api': {
-      id: 'openai-source-codex2api',
+    'openai-target-codex2api': {
+      id: 'openai-target-codex2api',
       label: 'Codex2API 来源',
       rowIds: ['row-codex2api-url', 'row-codex2api-admin-key'],
     },
     'openai-plus': {
       id: 'openai-plus',
       label: 'Plus',
-      rowIds: [
-        'row-plus-mode',
-      ],
+      rowIds: ['row-plus-mode'],
     },
     'openai-phone': {
       id: 'openai-phone',
@@ -325,8 +327,8 @@
       label: '第六步',
       rowIds: ['row-step6-cookie-settings'],
     },
-    'kiro-source-kiro-rs': {
-      id: 'kiro-source-kiro-rs',
+    'kiro-target-kiro-rs': {
+      id: 'kiro-target-kiro-rs',
       label: 'kiro.rs 配置',
       rowIds: ['row-kiro-rs-url', 'row-kiro-rs-key'],
     },
@@ -339,16 +341,10 @@
 
   function normalizeFlowId(value = '', fallback = DEFAULT_FLOW_ID) {
     const normalized = String(value || '').trim().toLowerCase();
-    if (normalized === LEGACY_OPENAI_FLOW_ALIAS) {
-      return DEFAULT_FLOW_ID;
-    }
     if (normalized && Object.prototype.hasOwnProperty.call(FLOW_DEFINITIONS, normalized)) {
       return normalized;
     }
     const fallbackValue = String(fallback || '').trim().toLowerCase();
-    if (fallbackValue === LEGACY_OPENAI_FLOW_ALIAS) {
-      return DEFAULT_FLOW_ID;
-    }
     return Object.prototype.hasOwnProperty.call(FLOW_DEFINITIONS, fallbackValue)
       ? fallbackValue
       : DEFAULT_FLOW_ID;
@@ -359,73 +355,92 @@
   }
 
   function getFlowDefinition(flowId) {
-    const normalizedFlowId = normalizeFlowId(flowId);
-    return FLOW_DEFINITIONS[normalizedFlowId] || FLOW_DEFINITIONS[DEFAULT_FLOW_ID];
+    return FLOW_DEFINITIONS[normalizeFlowId(flowId)] || FLOW_DEFINITIONS[DEFAULT_FLOW_ID];
   }
 
   function getFlowLabel(flowId) {
     return getFlowDefinition(flowId)?.label || normalizeFlowId(flowId);
   }
 
-  function getDefaultSourceId(flowId) {
+  function getDefaultIntegrationTargetId(flowId) {
     return normalizeFlowId(flowId) === 'kiro'
-      ? DEFAULT_KIRO_SOURCE_ID
-      : DEFAULT_OPENAI_SOURCE_ID;
+      ? DEFAULT_KIRO_INTEGRATION_TARGET_ID
+      : DEFAULT_OPENAI_INTEGRATION_TARGET_ID;
   }
 
-  function normalizeOpenAiSourceId(value = '', fallback = DEFAULT_OPENAI_SOURCE_ID) {
+  function normalizeOpenAiIntegrationTargetId(value = '', fallback = DEFAULT_OPENAI_INTEGRATION_TARGET_ID) {
     const normalized = String(value || '').trim().toLowerCase();
-    if (OPENAI_SOURCE_IDS.includes(normalized)) {
+    if (OPENAI_INTEGRATION_TARGET_IDS.includes(normalized)) {
       return normalized;
     }
     const fallbackValue = String(fallback || '').trim().toLowerCase();
-    return OPENAI_SOURCE_IDS.includes(fallbackValue) ? fallbackValue : DEFAULT_OPENAI_SOURCE_ID;
+    return OPENAI_INTEGRATION_TARGET_IDS.includes(fallbackValue)
+      ? fallbackValue
+      : DEFAULT_OPENAI_INTEGRATION_TARGET_ID;
   }
 
-  function normalizeKiroSourceId(value = '', fallback = DEFAULT_KIRO_SOURCE_ID) {
+  function normalizeKiroIntegrationTargetId(value = '', fallback = DEFAULT_KIRO_INTEGRATION_TARGET_ID) {
     const normalized = String(value || '').trim().toLowerCase();
-    if (normalized === DEFAULT_KIRO_SOURCE_ID) {
+    if (normalized === DEFAULT_KIRO_INTEGRATION_TARGET_ID) {
       return normalized;
     }
     const fallbackValue = String(fallback || '').trim().toLowerCase();
-    return fallbackValue === DEFAULT_KIRO_SOURCE_ID ? fallbackValue : DEFAULT_KIRO_SOURCE_ID;
+    return fallbackValue === DEFAULT_KIRO_INTEGRATION_TARGET_ID
+      ? fallbackValue
+      : DEFAULT_KIRO_INTEGRATION_TARGET_ID;
   }
 
-  function normalizeSourceId(flowId, sourceId = '', fallback = undefined) {
+  function normalizeIntegrationTargetId(flowId, integrationTargetId = '', fallback = undefined) {
     const normalizedFlowId = normalizeFlowId(flowId);
     if (normalizedFlowId === 'kiro') {
-      return normalizeKiroSourceId(sourceId, fallback || DEFAULT_KIRO_SOURCE_ID);
+      return normalizeKiroIntegrationTargetId(
+        integrationTargetId,
+        fallback || DEFAULT_KIRO_INTEGRATION_TARGET_ID
+      );
     }
-    return normalizeOpenAiSourceId(sourceId, fallback || DEFAULT_OPENAI_SOURCE_ID);
+    return normalizeOpenAiIntegrationTargetId(
+      integrationTargetId,
+      fallback || DEFAULT_OPENAI_INTEGRATION_TARGET_ID
+    );
   }
 
-  function getSourceDefinitions(flowId) {
-    return getFlowDefinition(flowId)?.sources || {};
+  function getIntegrationTargetDefinitions(flowId) {
+    return getFlowDefinition(flowId)?.integrationTargets || {};
   }
 
-  function getSourceDefinition(flowId, sourceId) {
+  function getIntegrationTargetDefinition(flowId, integrationTargetId) {
     const normalizedFlowId = normalizeFlowId(flowId);
-    const normalizedSourceId = normalizeSourceId(normalizedFlowId, sourceId, getDefaultSourceId(normalizedFlowId));
-    return getSourceDefinitions(normalizedFlowId)[normalizedSourceId] || null;
+    const normalizedIntegrationTargetId = normalizeIntegrationTargetId(
+      normalizedFlowId,
+      integrationTargetId,
+      getDefaultIntegrationTargetId(normalizedFlowId)
+    );
+    return getIntegrationTargetDefinitions(normalizedFlowId)[normalizedIntegrationTargetId] || null;
   }
 
-  function getSourceOptions(flowId) {
-    return Object.values(getSourceDefinitions(flowId));
+  function getIntegrationTargetOptions(flowId) {
+    return Object.values(getIntegrationTargetDefinitions(flowId));
   }
 
-  function getSourceLabel(flowId, sourceId) {
-    return getSourceDefinition(flowId, sourceId)?.label || normalizeSourceId(flowId, sourceId);
+  function getIntegrationTargetLabel(flowId, integrationTargetId) {
+    return getIntegrationTargetDefinition(flowId, integrationTargetId)?.label
+      || normalizeIntegrationTargetId(flowId, integrationTargetId);
   }
 
-  function mapPanelModeToSourceId(panelMode = '', fallback = DEFAULT_OPENAI_SOURCE_ID) {
-    return normalizeOpenAiSourceId(panelMode, fallback);
+  function getPublicationTargetDefinitions(flowId) {
+    return getFlowDefinition(flowId)?.publicationTargets || {};
   }
 
-  function mapSourceIdToPanelMode(flowId, sourceId = '', fallback = DEFAULT_OPENAI_SOURCE_ID) {
-    if (normalizeFlowId(flowId) !== DEFAULT_FLOW_ID) {
-      return normalizeOpenAiSourceId(fallback, DEFAULT_OPENAI_SOURCE_ID);
-    }
-    return normalizeOpenAiSourceId(sourceId, fallback || DEFAULT_OPENAI_SOURCE_ID);
+  function getPublicationTargetDefinition(flowId, publicationTargetId) {
+    const normalizedFlowId = normalizeFlowId(flowId);
+    const normalizedPublicationTargetId = String(
+      publicationTargetId || (
+        normalizedFlowId === 'kiro'
+          ? DEFAULT_KIRO_PUBLICATION_TARGET_ID
+          : ''
+      )
+    ).trim().toLowerCase();
+    return getPublicationTargetDefinitions(normalizedFlowId)[normalizedPublicationTargetId] || null;
   }
 
   function getFlowCapabilities(flowId) {
@@ -435,18 +450,27 @@
     };
   }
 
-  function getVisibleGroupIds(flowId, sourceId, options = {}) {
+  function getVisibleGroupIds(flowId, integrationTargetId, options = {}) {
     const normalizedFlowId = normalizeFlowId(flowId);
     const flowDefinition = getFlowDefinition(normalizedFlowId);
-    const normalizedSourceId = normalizeSourceId(normalizedFlowId, sourceId, getDefaultSourceId(normalizedFlowId));
-    const sourceDefinition = getSourceDefinition(normalizedFlowId, normalizedSourceId);
+    const normalizedIntegrationTargetId = normalizeIntegrationTargetId(
+      normalizedFlowId,
+      integrationTargetId,
+      getDefaultIntegrationTargetId(normalizedFlowId)
+    );
+    const integrationTargetDefinition = getIntegrationTargetDefinition(
+      normalizedFlowId,
+      normalizedIntegrationTargetId
+    );
     const includeSharedServices = options?.includeSharedServices !== false;
     const serviceGroups = includeSharedServices
-      ? (Array.isArray(flowDefinition?.services) ? flowDefinition.services.map((serviceId) => `service-${serviceId}`) : [])
+      ? (Array.isArray(flowDefinition?.services)
+        ? flowDefinition.services.map((serviceId) => `service-${serviceId}`)
+        : [])
       : [];
     return Array.from(new Set([
       ...(Array.isArray(flowDefinition?.baseGroups) ? flowDefinition.baseGroups : []),
-      ...(Array.isArray(sourceDefinition?.groups) ? sourceDefinition.groups : []),
+      ...(Array.isArray(integrationTargetDefinition?.groups) ? integrationTargetDefinition.groups : []),
       ...serviceGroups,
     ]));
   }
@@ -479,33 +503,33 @@
   return {
     DEFAULT_FLOW_CAPABILITIES,
     DEFAULT_FLOW_ID,
+    DEFAULT_KIRO_INTEGRATION_TARGET_ID,
+    DEFAULT_KIRO_PUBLICATION_TARGET_ID,
     DEFAULT_KIRO_RS_URL,
-    DEFAULT_KIRO_SOURCE_ID,
-    DEFAULT_OPENAI_SOURCE_ID,
+    DEFAULT_OPENAI_INTEGRATION_TARGET_ID,
     FLOW_DEFINITIONS,
-    LEGACY_OPENAI_FLOW_ALIAS,
-    OPENAI_SOURCE_IDS,
+    OPENAI_INTEGRATION_TARGET_IDS,
     SETTINGS_GROUP_DEFINITIONS,
     SHARED_SERVICE_IDS,
-    getDefaultSourceId,
+    getDefaultIntegrationTargetId,
     getDriverDefinitions,
     getFlowCapabilities,
     getFlowDefinition,
     getFlowLabel,
+    getIntegrationTargetDefinition,
+    getIntegrationTargetDefinitions,
+    getIntegrationTargetLabel,
+    getIntegrationTargetOptions,
+    getPublicationTargetDefinition,
+    getPublicationTargetDefinitions,
     getRegisteredFlowIds,
     getRuntimeSourceDefinitions,
     getSettingsGroupDefinition,
     getSettingsGroupDefinitions,
-    getSourceDefinition,
-    getSourceDefinitions,
-    getSourceLabel,
-    getSourceOptions,
     getVisibleGroupIds,
-    mapPanelModeToSourceId,
-    mapSourceIdToPanelMode,
     normalizeFlowId,
-    normalizeKiroSourceId,
-    normalizeOpenAiSourceId,
-    normalizeSourceId,
+    normalizeIntegrationTargetId,
+    normalizeKiroIntegrationTargetId,
+    normalizeOpenAiIntegrationTargetId,
   };
 });

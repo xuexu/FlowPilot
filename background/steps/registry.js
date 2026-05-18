@@ -4,10 +4,9 @@
   function createNodeRegistry(definitions = []) {
     const ordered = (Array.isArray(definitions) ? definitions : [])
       .map((definition) => ({
-        legacyStepId: Number(definition?.legacyStepId ?? definition?.id) || 0,
         flowId: String(definition?.flowId || '').trim(),
         nodeId: String(definition?.nodeId || definition?.key || '').trim(),
-        displayOrder: Number(definition?.displayOrder ?? definition?.order),
+        displayOrder: Number(definition?.displayOrder ?? definition?.order ?? definition?.id),
         executeKey: String(definition?.executeKey || definition?.key || definition?.nodeId || '').trim(),
         title: String(definition?.title || '').trim(),
         execute: definition?.execute,

@@ -798,9 +798,8 @@ function getNodeDefinitionsForState(state = {}) {
   }
   return getStepDefinitionsForState(state)
     .map((definition) => ({
-      legacyStepId: Number(definition?.id),
       nodeId: String(definition?.key || '').trim(),
-      displayOrder: Number.isFinite(Number(definition?.order)) ? Number(definition.order) : Number(definition?.id),
+      displayOrder: Number.isFinite(Number(definition?.id)) ? Number(definition.id) : Number(definition?.order),
       title: String(definition?.title || '').trim(),
       executeKey: String(definition?.key || '').trim(),
     }))
@@ -829,17 +828,21 @@ function getLastNodeIdForState(state = {}) {
 }
 
 function getNodeIdByStepForState(step, state = {}) {
-  const definition = getStepDefinitionForState(step, state);
-  return String(definition?.key || '').trim();
+  const numericStep = Number(step);
+  if (!Number.isInteger(numericStep) || numericStep <= 0) {
+    return '';
+  }
+  const node = getNodeDefinitionsForState(state).find((definition) => Number(definition?.displayOrder) === numericStep);
+  return String(node?.nodeId || '').trim();
 }
 
 function getStepIdByNodeIdForState(nodeId, state = {}) {
   const normalizedNodeId = String(nodeId || '').trim();
   if (!normalizedNodeId) return null;
   const node = getNodeDefinitionForState(normalizedNodeId, state);
-  const legacyStepId = Number(node?.legacyStepId);
-  if (Number.isInteger(legacyStepId) && legacyStepId > 0) {
-    return legacyStepId;
+  const displayOrder = Number(node?.displayOrder);
+  if (Number.isInteger(displayOrder) && displayOrder > 0) {
+    return displayOrder;
   }
   return getStepIdByKeyForState(normalizedNodeId, state);
 }
@@ -1074,6 +1077,39 @@ const PERSISTED_SETTING_DEFAULTS = {
 
 const PERSISTED_SETTING_KEYS = Object.keys(PERSISTED_SETTING_DEFAULTS);
 const PERSISTED_SETTINGS_SCHEMA_KEYS = ['settingsSchemaVersion', 'settingsState'];
+const SETTINGS_SCHEMA_VIEW_KEYS = Object.freeze([
+  'activeFlowId',
+  'openaiIntegrationTargetId',
+  'kiroIntegrationTargetId',
+  'panelMode',
+  'kiroSourceId',
+  'vpsUrl',
+  'vpsPassword',
+  'localCpaStep9Mode',
+  'sub2apiUrl',
+  'sub2apiEmail',
+  'sub2apiPassword',
+  'sub2apiGroupName',
+  'sub2apiGroupNames',
+  'sub2apiAccountPriority',
+  'sub2apiDefaultProxyName',
+  'codex2apiUrl',
+  'codex2apiAdminKey',
+  'customPassword',
+  'signupMethod',
+  'phoneVerificationEnabled',
+  'phoneSignupReloginAfterBindEmailEnabled',
+  'plusModeEnabled',
+  'plusPaymentMethod',
+  'mailProvider',
+  'ipProxyEnabled',
+  'ipProxyService',
+  'ipProxyMode',
+  'kiroRsUrl',
+  'kiroRsKey',
+  'stepExecutionRangeByFlow',
+]);
+const SETTINGS_SCHEMA_VIEW_KEY_SET = new Set(SETTINGS_SCHEMA_VIEW_KEYS);
 const SETTINGS_EXPORT_SCHEMA_VERSION = 1;
 const SETTINGS_EXPORT_FILENAME_PREFIX = 'multipage-settings';
 const STEP6_REGISTRATION_SUCCESS_WAIT_MS = 20000;
@@ -1087,91 +1123,14 @@ const DEFAULT_STATE = {
   nodeStatuses: { ...DEFAULT_NODE_STATUSES },
   runtimeState: runtimeStateHelpers?.buildDefaultRuntimeState?.() || null,
   ...CONTRIBUTION_RUNTIME_DEFAULTS,
-  oauthUrl: null, // 运行时抓取到的 OAuth 地址，不要手动预填。
-  resolvedSignupMethod: null, // 当前自动轮次冻结后的实际注册方式。
-  accountIdentifierType: null,
-  accountIdentifier: '',
-  registrationEmailState: { ...DEFAULT_REGISTRATION_EMAIL_STATE },
-  email: null, // 运行时邮箱，由程序自动获取并写入，不能手动预填。
-  password: null, // 运行时实际密码，由 customPassword 或程序自动生成后写入。
   accounts: [], // 已生成账号记录：{ email, password, createdAt }。
   accountRunHistory: [], // 账号运行历史快照，实际持久化在 chrome.storage.local。
   manualAliasUsage: {},
   preservedAliases: {},
   icloudAliasCache: [],
   icloudAliasCacheAt: 0,
-  lastEmailTimestamp: null, // 最近一次获取到邮箱数据的运行时时间戳。
-  lastSignupCode: null, // 注册验证码，运行时由程序自动读取并写入。
-  lastLoginCode: null, // 登录验证码，运行时由程序自动读取并写入。
-  localhostUrl: null, // 运行时捕获到的 localhost 回调地址，不要手动预填。
-  cpaOAuthState: null, // CPA OAuth state。
-  cpaManagementOrigin: null, // CPA 管理接口 origin。
-  sub2apiSessionId: null, // SUB2API OpenAI Auth 会话 ID。
-  sub2apiOAuthState: null, // SUB2API OpenAI Auth state。
-  sub2apiGroupId: null, // SUB2API 目标分组 ID。
-  sub2apiGroupIds: [], // SUB2API 多目标分组 ID。
-  sub2apiDraftName: null, // SUB2API 本轮预生成的账号名称。
-  sub2apiProxyId: null, // SUB2API 本轮使用的代理 ID。
-  codex2apiSessionId: null, // Codex2API OAuth 会话 ID。
-  codex2apiOAuthState: null, // Codex2API OAuth state。
-  plusCheckoutTabId: null, // Plus checkout / PayPal 标签页 ID。
-  automationWindowId: null, // 当前任务锁定的浏览器窗口 ID，避免新标签页跑到其它窗口。
-  plusCheckoutUrl: null, // Plus checkout 运行时短链，不写入持久配置。
-  plusCheckoutCountry: 'DE',
-  plusCheckoutCurrency: 'EUR',
-  plusCheckoutSource: '',
-  plusBillingCountryText: '',
-  plusBillingAddress: null,
-  plusPaypalApprovedAt: null,
-  plusGoPayApprovedAt: null,
-  plusReturnUrl: '',
-  plusManualConfirmationPending: false,
-  plusManualConfirmationRequestId: '',
-  plusManualConfirmationStep: 0,
-  plusManualConfirmationMethod: '',
-  plusManualConfirmationTitle: '',
-  plusManualConfirmationMessage: '',
-  gopayHelperReferenceId: '',
-  gopayHelperGoPayGuid: '',
-  gopayHelperRedirectUrl: '',
-  gopayHelperNextAction: '',
-  gopayHelperFlowId: '',
-  gopayHelperChallengeId: '',
-  gopayHelperStartPayload: null,
-  gopayHelperTaskId: '',
-  gopayHelperTaskStatus: '',
-  gopayHelperStatusText: '',
-  gopayHelperRemoteStage: '',
-  gopayHelperApiWaitingFor: '',
-  gopayHelperApiInputDeadlineAt: '',
-  gopayHelperApiInputWaitSeconds: 0,
-  gopayHelperLastInputError: '',
-  gopayHelperOtpInvalidCount: 0,
-  gopayHelperFailureStage: '',
-  gopayHelperFailureDetail: '',
-  gopayHelperTaskPayload: null,
-  gopayHelperOrderCreatedAt: 0,
-  gopayHelperTaskProgressSignature: '',
-  gopayHelperTaskProgressAt: 0,
-  gopayHelperTaskProgressTaskId: '',
-  gopayHelperPinPayload: null,
-  gopayHelperResolvedOtp: '',
-  gopayHelperOtpRequestId: '',
-  gopayHelperOtpReferenceId: '',
-  flowStartTime: null, // 当前流程开始时间。
-  tabRegistry: {}, // 程序维护的标签页注册表。
-  sourceLastUrls: {}, // 各来源页面最近一次打开的地址记录。
   logs: [], // 侧边栏展示的运行日志。
   ...PERSISTED_SETTING_DEFAULTS, // 合并 chrome.storage.local 中持久化保存的用户配置。
-  ipProxyApiPool: [],
-  ipProxyApiCurrentIndex: 0,
-  ipProxyApiCurrent: null,
-  ipProxyAccountPool: [],
-  ipProxyAccountCurrentIndex: 0,
-  ipProxyAccountCurrent: null,
-  ipProxyPool: [],
-  ipProxyCurrentIndex: 0,
-  ipProxyCurrent: null,
   luckmailApiKey: '',
   luckmailBaseUrl: DEFAULT_LUCKMAIL_BASE_URL,
   luckmailEmailType: DEFAULT_LUCKMAIL_EMAIL_TYPE,
@@ -1179,23 +1138,6 @@ const DEFAULT_STATE = {
   luckmailUsedPurchases: {},
   luckmailPreserveTagId: 0,
   luckmailPreserveTagName: DEFAULT_LUCKMAIL_PRESERVE_TAG_NAME,
-  currentLuckmailPurchase: null,
-  currentLuckmailMailCursor: null,
-  currentYydsMailInbox: null,
-  currentPhoneActivation: null,
-  phoneNumber: '',
-  currentPhoneVerificationCode: '',
-  currentPhoneVerificationCountdownEndsAt: 0,
-  currentPhoneVerificationCountdownWindowIndex: 0,
-  currentPhoneVerificationCountdownWindowTotal: 0,
-  reusablePhoneActivation: null,
-  freeReusablePhoneActivation: null,
-  phoneReusableActivationPool: [],
-  signupPhoneNumber: '',
-  signupPhoneActivation: null,
-  signupPhoneCompletedActivation: null,
-  signupPhoneVerificationRequestedAt: null,
-  signupPhoneVerificationPurpose: '',
   heroSmsLastPriceTiers: [],
   heroSmsLastPriceCountryId: 0,
   heroSmsLastPriceCountryLabel: '',
@@ -3353,14 +3295,14 @@ function buildPersistentSettingsPayload(input = {}, options = {}) {
     const settingsSchemaApi = typeof getSettingsSchemaApi === 'function'
       ? getSettingsSchemaApi()
       : null;
-    if (settingsSchemaApi?.normalizeSettingsState && settingsSchemaApi?.buildLegacySettingsPayload) {
+    if (settingsSchemaApi?.normalizeSettingsState && settingsSchemaApi?.buildSettingsView) {
       const settingsSchemaInput = {};
       for (const key of persistedSettingKeys) {
         if (normalizedInput[key] !== undefined) {
           settingsSchemaInput[key] = payload[key];
         }
       }
-      const normalizedSettingsState = settingsSchemaApi.normalizeSettingsState({
+      Object.assign(payload, projectSettingsSchemaView(settingsSchemaApi, {
         ...settingsSchemaInput,
         ...(isPlainObjectForSettingsSchema(normalizedInput.settingsState)
           ? { settingsState: normalizedInput.settingsState }
@@ -3368,13 +3310,7 @@ function buildPersistentSettingsPayload(input = {}, options = {}) {
         ...(Object.prototype.hasOwnProperty.call(normalizedInput, 'settingsSchemaVersion')
           ? { settingsSchemaVersion: normalizedInput.settingsSchemaVersion }
           : {}),
-      }, {
-        activeFlowId: settingsSchemaInput.activeFlowId || normalizedInput.activeFlowId || DEFAULT_ACTIVE_FLOW_ID,
-      });
-      Object.assign(
-        payload,
-        settingsSchemaApi.buildLegacySettingsPayload(normalizedSettingsState, payload)
-      );
+      }, payload));
     }
   }
 
@@ -3389,6 +3325,32 @@ function getSettingsSchemaApi() {
     flowRegistry: self.MultiPageFlowRegistry,
     defaultFlowId: DEFAULT_ACTIVE_FLOW_ID,
   });
+}
+
+function projectSettingsSchemaView(settingsSchemaApi, normalizedInput = {}, payload = {}) {
+  if (
+    !settingsSchemaApi?.normalizeSettingsState
+    || !settingsSchemaApi?.buildSettingsView
+  ) {
+    return payload;
+  }
+  const normalizedSettingsState = settingsSchemaApi.normalizeSettingsState(normalizedInput, {
+    activeFlowId: normalizedInput?.activeFlowId || DEFAULT_ACTIVE_FLOW_ID,
+  });
+  return settingsSchemaApi.buildSettingsView(normalizedSettingsState, payload);
+}
+
+function buildPersistedSettingsStoragePayload(payload = {}) {
+  const storagePayload = {};
+  Object.entries(payload || {}).forEach(([key, value]) => {
+    if (SETTINGS_SCHEMA_VIEW_KEY_SET.has(key)) {
+      return;
+    }
+    storagePayload[key] = value;
+  });
+  storagePayload.settingsSchemaVersion = Number(payload?.settingsSchemaVersion) || 0;
+  storagePayload.settingsState = payload?.settingsState;
+  return storagePayload;
 }
 
 async function getPersistedSettings() {
@@ -3481,6 +3443,9 @@ function buildAutoRunFreshResetSettingsState(prevState = {}, activeFlowId = DEFA
   const nextSettingsStatePatch = {
     activeFlowId,
     services: {
+      account: {
+        customPassword: prevState?.customPassword,
+      },
       email: {
         provider: prevState?.mailProvider,
       },
@@ -3492,9 +3457,7 @@ function buildAutoRunFreshResetSettingsState(prevState = {}, activeFlowId = DEFA
     },
     flows: {
       openai: {
-        source: {
-          selected: prevState?.panelMode,
-        },
+        integrationTargetId: prevState?.openaiIntegrationTargetId || prevState?.panelMode,
         autoRun: normalizedStepExecutionRangeByFlow.openai
           ? {
             stepExecutionRange: normalizedStepExecutionRangeByFlow.openai,
@@ -3502,9 +3465,7 @@ function buildAutoRunFreshResetSettingsState(prevState = {}, activeFlowId = DEFA
           : undefined,
       },
       kiro: {
-        source: {
-          selected: prevState?.kiroSourceId,
-        },
+        integrationTargetId: prevState?.kiroIntegrationTargetId || prevState?.kiroSourceId,
         autoRun: normalizedStepExecutionRangeByFlow.kiro
           ? {
             stepExecutionRange: normalizedStepExecutionRangeByFlow.kiro,
@@ -3651,78 +3612,58 @@ async function setPersistentSettings(updates) {
   const settingsSchemaApi = typeof getSettingsSchemaApi === 'function'
     ? getSettingsSchemaApi()
     : null;
+  const hasSchemaApi = Boolean(
+    settingsSchemaApi?.normalizeSettingsState
+    && settingsSchemaApi?.buildSettingsView
+  );
+  const explicitFlatUpdates = {
+    ...nextUpdates,
+  };
+  delete explicitFlatUpdates.settingsSchemaVersion;
+  delete explicitFlatUpdates.settingsState;
 
-  let persistedUpdates;
-  if (settingsSchemaApi?.normalizeSettingsState && settingsSchemaApi?.buildLegacySettingsPayload) {
-    const isPlainObjectForSettingsSchema = typeof isPlainObjectValue === 'function'
-      ? isPlainObjectValue
-      : ((value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value));
-    const cloneSettingsValue = (value) => {
-      if (Array.isArray(value)) {
-        return value.map((entry) => cloneSettingsValue(entry));
-      }
-      if (isPlainObjectForSettingsSchema(value)) {
-        return Object.fromEntries(
-          Object.entries(value).map(([key, entryValue]) => [key, cloneSettingsValue(entryValue)])
-        );
-      }
-      return value;
-    };
-    const mergeSettingsState = (baseValue, patchValue) => {
-      if (Array.isArray(patchValue)) {
-        return patchValue.map((entry) => cloneSettingsValue(entry));
-      }
-      if (!isPlainObjectForSettingsSchema(patchValue)) {
-        return patchValue === undefined ? cloneSettingsValue(baseValue) : patchValue;
-      }
-
-      const baseObject = isPlainObjectForSettingsSchema(baseValue) ? baseValue : {};
-      const nextObject = {
-        ...cloneSettingsValue(baseObject),
-      };
-      for (const [key, entryValue] of Object.entries(patchValue)) {
-        nextObject[key] = mergeSettingsState(baseObject[key], entryValue);
-      }
-      return nextObject;
-    };
-
+  let mergedSettingsState = nextUpdates.settingsState ?? currentSettings.settingsState;
+  if (hasSchemaApi) {
     const currentSettingsState = settingsSchemaApi.normalizeSettingsState(
-      isPlainObjectForSettingsSchema(currentSettings?.settingsState)
+      isPlainObjectValue(currentSettings?.settingsState)
         ? { settingsState: currentSettings.settingsState }
         : currentSettings,
       {
         activeFlowId: currentSettings?.activeFlowId || DEFAULT_ACTIVE_FLOW_ID,
       }
     );
-    const mergedSettingsState = isPlainObjectForSettingsSchema(nextUpdates.settingsState)
-      ? mergeSettingsState(currentSettingsState, nextUpdates.settingsState)
+    mergedSettingsState = isPlainObjectValue(nextUpdates.settingsState)
+      ? (typeof settingsSchemaApi.mergeSettingsState === 'function'
+        ? settingsSchemaApi.mergeSettingsState(currentSettingsState, nextUpdates.settingsState)
+        : nextUpdates.settingsState)
       : currentSettingsState;
-    const explicitFlatUpdates = {
-      ...nextUpdates,
-    };
-    delete explicitFlatUpdates.settingsSchemaVersion;
-    delete explicitFlatUpdates.settingsState;
-
-    persistedUpdates = buildPersistentSettingsPayload({
-      ...explicitFlatUpdates,
-      settingsSchemaVersion: nextUpdates.settingsSchemaVersion ?? currentSettings.settingsSchemaVersion,
-      settingsState: mergedSettingsState,
-    }, {
-      fillDefaults: true,
-    });
-  } else {
-    persistedUpdates = buildPersistentSettingsPayload({
-      ...currentSettings,
-      ...nextUpdates,
-      settingsSchemaVersion: nextUpdates.settingsSchemaVersion ?? currentSettings.settingsSchemaVersion,
-      settingsState: nextUpdates.settingsState ?? currentSettings.settingsState,
-    }, {
-      fillDefaults: true,
-    });
   }
 
+  const nextPayloadInput = {
+    ...currentSettings,
+    ...explicitFlatUpdates,
+    settingsSchemaVersion: nextUpdates.settingsSchemaVersion ?? currentSettings.settingsSchemaVersion,
+    settingsState: mergedSettingsState,
+  };
+  if (hasSchemaApi && isPlainObjectValue(nextUpdates.settingsState)) {
+    for (const key of SETTINGS_SCHEMA_VIEW_KEYS) {
+      delete nextPayloadInput[key];
+    }
+    Object.assign(nextPayloadInput, explicitFlatUpdates);
+  }
+
+  const persistedUpdates = buildPersistentSettingsPayload(nextPayloadInput, {
+    fillDefaults: true,
+  });
+
   if (Object.keys(persistedUpdates).length > 0) {
-    await chrome.storage.local.set(persistedUpdates);
+    const storagePayload = hasSchemaApi
+      ? buildPersistedSettingsStoragePayload(persistedUpdates)
+      : persistedUpdates;
+    if (hasSchemaApi && chrome.storage?.local?.remove) {
+      await chrome.storage.local.remove(SETTINGS_SCHEMA_VIEW_KEYS);
+    }
+    await chrome.storage.local.set(storagePayload);
   }
   return persistedUpdates;
 }
@@ -13563,9 +13504,8 @@ function buildNodeRegistry(definitions = []) {
   return self.MultiPageBackgroundStepRegistry?.createNodeRegistry(
     definitions.map((definition) => ({
       ...definition,
-      legacyStepId: definition.legacyStepId || definition.id,
       nodeId: definition.nodeId || definition.key,
-      displayOrder: definition.displayOrder || definition.order,
+      displayOrder: definition.displayOrder || definition.id || definition.order,
       executeKey: definition.executeKey || definition.key,
       execute: stepExecutorsByKey[definition.executeKey || definition.key || definition.nodeId],
     }))
@@ -13580,15 +13520,15 @@ function buildStepRegistry(definitions = []) {
   const normalizedDefinitions = (Array.isArray(definitions) ? definitions : [])
     .map((definition) => ({
       ...definition,
-      legacyStepId: Number(definition?.legacyStepId ?? definition?.id) || 0,
+      displayOrder: Number(definition?.displayOrder ?? definition?.id ?? definition?.order) || 0,
       nodeId: String(definition?.nodeId || definition?.key || '').trim(),
     }))
     .filter((definition) => definition.nodeId);
   const nodeRegistry = buildNodeRegistry(normalizedDefinitions);
   const stepToNodeDefinition = new Map(
     normalizedDefinitions
-      .filter((definition) => Number.isInteger(definition.legacyStepId) && definition.legacyStepId > 0)
-      .map((definition) => [definition.legacyStepId, definition])
+      .filter((definition) => Number.isInteger(definition.displayOrder) && definition.displayOrder > 0)
+      .map((definition) => [definition.displayOrder, definition])
   );
 
   return {
@@ -13617,10 +13557,10 @@ function getStepRegistryForState(state = {}) {
   const activeFlowId = String(state?.activeFlowId || state?.flowId || DEFAULT_ACTIVE_FLOW_ID).trim().toLowerCase() || DEFAULT_ACTIVE_FLOW_ID;
   const cacheKey = `${activeFlowId}:${(Array.isArray(definitions) ? definitions : [])
     .map((definition) => [
-      Number(definition?.legacyStepId ?? definition?.id) || 0,
+      Number(definition?.displayOrder ?? definition?.id ?? definition?.order) || 0,
       String(definition?.nodeId || definition?.key || '').trim(),
       String(definition?.executeKey || definition?.key || '').trim(),
-      Number(definition?.displayOrder ?? definition?.order) || 0,
+      Number(definition?.displayOrder ?? definition?.id ?? definition?.order) || 0,
     ].join(':'))
     .join('|')}`;
 
