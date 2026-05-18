@@ -248,14 +248,21 @@
       </div>
       <div class="data-row" id="row-kiro-rs-key" style="display:none;">
         <span class="data-label">API Key</span>
-        <div class="input-with-icon">
-          <input type="password" id="input-kiro-rs-key" class="data-input data-input-with-icon"
-            placeholder="请输入 kiro.rs API Key" />
-          <button id="btn-toggle-kiro-rs-key" class="input-icon-btn" type="button"
-            data-password-toggle="input-kiro-rs-key" data-show-label="显示 kiro.rs API Key"
-            data-hide-label="隐藏 kiro.rs API Key" aria-label="显示 kiro.rs API Key"
-            title="显示 kiro.rs API Key"></button>
+        <div class="data-inline">
+          <div class="input-with-icon">
+            <input type="password" id="input-kiro-rs-key" class="data-input data-input-with-icon"
+              placeholder="请输入 kiro.rs API Key" />
+            <button id="btn-toggle-kiro-rs-key" class="input-icon-btn" type="button"
+              data-password-toggle="input-kiro-rs-key" data-show-label="显示 kiro.rs API Key"
+              data-hide-label="隐藏 kiro.rs API Key" aria-label="显示 kiro.rs API Key"
+              title="显示 kiro.rs API Key"></button>
+          </div>
+          <button id="btn-test-kiro-rs" class="btn btn-ghost btn-xs data-inline-btn" type="button">测试</button>
         </div>
+      </div>
+      <div class="data-row" id="row-kiro-rs-test-status" style="display:none;">
+        <span class="data-label">连接测试</span>
+        <span id="display-kiro-rs-test-status" class="data-value mono">未测试</span>
       </div>
       <div class="data-row" id="row-kiro-device-code" style="display:none;">
         <span class="data-label">授权码</span>

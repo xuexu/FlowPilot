@@ -47,6 +47,25 @@
     return cleanString(value) || fallback;
   }
 
+  function normalizeKiroRsApiKey(value = '') {
+    return cleanString(value);
+  }
+
+  function buildKiroRsAdminHeaders(apiKey = '', extraHeaders = {}) {
+    const normalizedApiKey = normalizeKiroRsApiKey(apiKey);
+    return {
+      ...extraHeaders,
+      ...(normalizedApiKey ? {
+        'x-api-key': normalizedApiKey,
+        Authorization: `Bearer ${normalizedApiKey}`,
+      } : {}),
+    };
+  }
+
+  function readKiroRsResponseMessage(body = {}, fallback = '') {
+    return cleanString(body?.json?.error?.message || body?.json?.message || body?.text || fallback);
+  }
+
   function normalizeKiroRsBaseUrl(value = '') {
     const normalized = cleanString(value).replace(/\/+$/, '');
     if (!normalized) {
@@ -116,7 +135,7 @@
       || {};
     return {
       baseUrl: cleanString(nestedConfig.baseUrl || state?.kiroRsUrl),
-      apiKey: String(nestedConfig.apiKey ?? state?.kiroRsKey ?? ''),
+      apiKey: normalizeKiroRsApiKey(nestedConfig.apiKey ?? state?.kiroRsKey ?? ''),
     };
   }
 
@@ -199,60 +218,64 @@
 
   async function checkKiroRsConnection(baseUrl, apiKey, fetchImpl) {
     const normalizedBaseUrl = normalizeKiroRsBaseUrl(baseUrl);
+    const normalizedApiKey = normalizeKiroRsApiKey(apiKey);
     const response = await fetchImpl(`${normalizedBaseUrl}/api/admin/credentials`, {
       method: 'GET',
-      headers: {
+      headers: buildKiroRsAdminHeaders(normalizedApiKey, {
         Accept: 'application/json',
-        'x-api-key': String(apiKey || ''),
-      },
+      }),
     });
     const body = await readResponse(response);
+    const detail = readKiroRsResponseMessage(body, response.statusText);
     if (response.ok) {
       return {
         ok: true,
+        status: response.status,
         message: `kiro.rs 连接正常（HTTP ${response.status}）`,
       };
     }
     if (response.status === 405) {
       return {
         ok: true,
+        status: response.status,
         message: 'kiro.rs 上传接口可访问。',
       };
     }
     if (response.status === 401 || response.status === 403) {
       return {
         ok: false,
-        message: `kiro.rs API Key 被拒绝（HTTP ${response.status}）`,
+        status: response.status,
+        message: `kiro.rs API Key 被拒绝（HTTP ${response.status}${detail ? `：${detail}` : ''}）`,
       };
     }
     if (response.status === 404) {
       return {
         ok: false,
-        message: '未找到 kiro.rs 管理接口。',
+        status: response.status,
+        message: `未找到 kiro.rs 管理接口（HTTP 404${detail ? `：${detail}` : ''}）`,
       };
     }
     return {
       ok: false,
-      message: cleanString(body.json?.error?.message || body.json?.message || body.text || response.statusText)
-        || `kiro.rs 连接失败（HTTP ${response.status}）`,
+      status: response.status,
+      message: detail || `kiro.rs 连接失败（HTTP ${response.status}）`,
     };
   }
 
   async function uploadBuilderIdCredential(baseUrl, apiKey, payload, fetchImpl) {
     const normalizedBaseUrl = normalizeKiroRsBaseUrl(baseUrl);
+    const normalizedApiKey = normalizeKiroRsApiKey(apiKey);
     const response = await fetchImpl(`${normalizedBaseUrl}/api/admin/credentials`, {
       method: 'POST',
-      headers: {
+      headers: buildKiroRsAdminHeaders(normalizedApiKey, {
         'Content-Type': 'application/json',
         Accept: 'application/json',
-        'x-api-key': String(apiKey || ''),
-      },
+      }),
       body: JSON.stringify(payload),
     });
     const body = await readResponse(response);
     if (!response.ok) {
-      const message = cleanString(body.json?.error?.message || body.json?.message || body.text || response.statusText)
-        || `HTTP ${response.status}`;
+      const message = readKiroRsResponseMessage(body, response.statusText) || `HTTP ${response.status}`;
       throw new Error(`kiro.rs 凭据上传失败：${message}`);
     }
 

@@ -357,7 +357,7 @@
     'kiro-target-kiro-rs': {
       id: 'kiro-target-kiro-rs',
       label: 'kiro.rs 配置',
-      rowIds: ['row-kiro-rs-url', 'row-kiro-rs-key'],
+      rowIds: ['row-kiro-rs-url', 'row-kiro-rs-key', 'row-kiro-rs-test-status'],
     },
     'kiro-runtime-status': {
       id: 'kiro-runtime-status',

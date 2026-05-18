@@ -2775,7 +2775,7 @@ function normalizePersistentSettingValue(key, value) {
         || 'https://kiro.leftcode.xyz/admin'
       ).trim() || 'https://kiro.leftcode.xyz/admin';
     case 'kiroRsKey':
-      return String(value || '');
+      return String(value || '').trim();
     case 'vpsUrl':
       return String(value || '').trim();
     case 'vpsPassword':
@@ -13351,6 +13351,16 @@ const messageRouter = self.MultiPageBackgroundMessageRouter?.createMessageRouter
   fetchGeneratedEmail,
   refreshGpcCardBalance,
   finalizePhoneActivationAfterSuccessfulFlow,
+  testKiroRsConnection: async (baseUrl, apiKey) => {
+    if (typeof self.MultiPageBackgroundKiroPublisherKiroRs?.checkKiroRsConnection !== 'function') {
+      throw new Error('kiro.rs 连接测试能力尚未接入。');
+    }
+    return self.MultiPageBackgroundKiroPublisherKiroRs.checkKiroRsConnection(
+      baseUrl,
+      apiKey,
+      typeof fetch === 'function' ? fetch.bind(globalThis) : null
+    );
+  },
   finalizeStep3Completion: async () => {
     const currentState = await getState();
     const signupTabId = await getTabId('signup-page');

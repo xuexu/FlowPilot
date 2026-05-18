@@ -449,6 +449,63 @@ test('SAVE_SETTING syncs canonical kiro settingsState back into session state', 
   assert.equal(state.settingsState.flows.kiro.targets['kiro-rs'].apiKey, 'live-key');
 });
 
+test('CHECK_KIRO_RS_CONNECTION prefers current sidepanel payload over stale saved kiro.rs config', async () => {
+  const source = fs.readFileSync('background/message-router.js', 'utf8');
+  const globalScope = { console };
+  const api = new Function('self', `${source}; return self.MultiPageBackgroundMessageRouter;`)(globalScope);
+  const calls = [];
+  const router = api.createMessageRouter({
+    getState: async () => ({
+      activeFlowId: 'kiro',
+      flowId: 'kiro',
+      kiroTargetId: 'kiro-rs',
+      kiroRsUrl: 'https://old.example.com/admin',
+      kiroRsKey: 'old-key',
+      settingsState: {
+        flows: {
+          kiro: {
+            targetId: 'kiro-rs',
+            targets: {
+              'kiro-rs': {
+                baseUrl: 'https://old.example.com/admin',
+                apiKey: 'old-key',
+              },
+            },
+          },
+        },
+      },
+    }),
+    testKiroRsConnection: async (baseUrl, apiKey) => {
+      calls.push({ baseUrl, apiKey });
+      return {
+        ok: false,
+        status: 401,
+        message: 'kiro.rs API Key 被拒绝（HTTP 401：Invalid or missing admin API key）',
+      };
+    },
+  });
+
+  const response = await router.handleMessage({
+    type: 'CHECK_KIRO_RS_CONNECTION',
+    payload: {
+      activeFlowId: 'kiro',
+      targetId: 'kiro-rs',
+      baseUrl: ' https://new.example.com/admin/ ',
+      apiKey: ' new-key ',
+    },
+  });
+
+  assert.equal(response.ok, false);
+  assert.equal(response.status, 401);
+  assert.equal(response.message, 'kiro.rs API Key 被拒绝（HTTP 401：Invalid or missing admin API key）');
+  assert.deepStrictEqual(calls, [
+    {
+      baseUrl: 'https://new.example.com/admin/',
+      apiKey: ' new-key ',
+    },
+  ]);
+});
+
 test('AUTO_RUN applies current flow selection from payload before starting loop', async () => {
   const source = fs.readFileSync('background/message-router.js', 'utf8');
   const globalScope = { console };

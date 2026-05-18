@@ -278,7 +278,7 @@ return {
   assert.equal(api.normalizePersistentSettingValue('activeFlowId', 'kiro'), 'kiro');
   assert.equal(api.normalizePersistentSettingValue('kiroTargetId', 'unknown'), 'kiro-rs');
   assert.equal(api.normalizePersistentSettingValue('kiroRsUrl', ''), 'https://kiro.leftcode.xyz/admin');
-  assert.equal(api.normalizePersistentSettingValue('kiroRsKey', ' key-1 '), ' key-1 ');
+  assert.equal(api.normalizePersistentSettingValue('kiroRsKey', ' key-1 '), 'key-1');
   assert.equal(api.normalizePersistentSettingValue('phoneSmsProvider', '5SIM'), '5sim');
   assert.equal(api.normalizePersistentSettingValue('phoneSmsProvider', 'NEXSMS'), 'nexsms');
   assert.equal(api.normalizePersistentSettingValue('phoneSmsProvider', 'unknown'), 'hero-sms');

@@ -175,6 +175,9 @@ const rowKiroRsUrl = document.getElementById('row-kiro-rs-url');
 const inputKiroRsUrl = document.getElementById('input-kiro-rs-url');
 const rowKiroRsKey = document.getElementById('row-kiro-rs-key');
 const inputKiroRsKey = document.getElementById('input-kiro-rs-key');
+const btnTestKiroRs = document.getElementById('btn-test-kiro-rs');
+const rowKiroRsTestStatus = document.getElementById('row-kiro-rs-test-status');
+const displayKiroRsTestStatus = document.getElementById('display-kiro-rs-test-status');
 const rowKiroDeviceCode = document.getElementById('row-kiro-device-code');
 const displayKiroDeviceCode = document.getElementById('display-kiro-device-code');
 const rowKiroLoginUrl = document.getElementById('row-kiro-login-url');
@@ -551,6 +554,7 @@ let currentSignupMethod = DEFAULT_SIGNUP_METHOD;
 let currentPhoneSignupReloginAfterBindEmailEnabled = DEFAULT_PHONE_SIGNUP_RELOGIN_AFTER_BIND_EMAIL_ENABLED;
 let currentStepDefinitionFlowId = DEFAULT_ACTIVE_FLOW_ID;
 let phoneSignupReuseUiWasLocked = false;
+let kiroRsConnectionTestStatusText = '未测试';
 let heroSmsCountrySelectionOrder = [];
 let phoneSmsProviderOrderSelection = [];
 let heroSmsCountryMenuSearchKeyword = '';
@@ -2398,6 +2402,14 @@ function getKiroUploadStatusLabel(value = '') {
       return '已过期';
     default:
       return rawValue;
+  }
+}
+
+function setKiroRsConnectionTestStatus(message = '') {
+  const nextText = String(message || '').trim() || '未测试';
+  kiroRsConnectionTestStatusText = nextText;
+  if (typeof displayKiroRsTestStatus !== 'undefined' && displayKiroRsTestStatus) {
+    displayKiroRsTestStatus.textContent = nextText;
   }
 }
 
@@ -4253,6 +4265,12 @@ function collectSettingsPayload() {
       const normalized = String(targetId || '').trim().toLowerCase();
       return normalized || String(fallback || '').trim().toLowerCase() || 'kiro-rs';
     });
+  const currentKiroRsUrlValue = typeof inputKiroRsUrl !== 'undefined' && inputKiroRsUrl
+    ? String(inputKiroRsUrl.value ?? '').trim()
+    : null;
+  const currentKiroRsKeyValue = typeof inputKiroRsKey !== 'undefined' && inputKiroRsKey
+    ? String(inputKiroRsKey.value ?? '').trim()
+    : null;
   return {
     activeFlowId,
     ...(contributionModeEnabled ? {} : {
@@ -4265,16 +4283,12 @@ function collectSettingsPayload() {
         : (latestState?.kiroTargetId || 'kiro-rs'),
       'kiro-rs'
     ),
-    kiroRsUrl: String(
-      (typeof inputKiroRsUrl !== 'undefined' && inputKiroRsUrl ? inputKiroRsUrl.value : '')
-      || latestState?.kiroRsUrl
-      || defaultKiroRsUrl
-    ).trim() || defaultKiroRsUrl,
-    kiroRsKey: String(
-      (typeof inputKiroRsKey !== 'undefined' && inputKiroRsKey ? inputKiroRsKey.value : '')
-      || latestState?.kiroRsKey
-      || ''
-    ),
+    kiroRsUrl: currentKiroRsUrlValue !== null
+      ? (currentKiroRsUrlValue || defaultKiroRsUrl)
+      : (String(latestState?.kiroRsUrl || defaultKiroRsUrl).trim() || defaultKiroRsUrl),
+    kiroRsKey: currentKiroRsKeyValue !== null
+      ? currentKiroRsKeyValue
+      : String(latestState?.kiroRsKey || '').trim(),
     vpsUrl: inputVpsUrl.value.trim(),
     vpsPassword: inputVpsPassword.value,
     localCpaStep9Mode: getSelectedLocalCpaStep9Mode(),
@@ -10029,6 +10043,9 @@ function applySettingsState(state) {
   if (typeof inputKiroRsKey !== 'undefined' && inputKiroRsKey) {
     inputKiroRsKey.value = String(state?.kiroRsKey || '');
   }
+  if (typeof displayKiroRsTestStatus !== 'undefined' && displayKiroRsTestStatus) {
+    displayKiroRsTestStatus.textContent = kiroRsConnectionTestStatusText;
+  }
   if (typeof displayKiroDeviceCode !== 'undefined' && displayKiroDeviceCode) {
     const kiroDeviceCode = String(
       state?.kiroRuntime?.register?.userCode
@@ -13679,6 +13696,7 @@ btnReset.addEventListener('click', async () => {
   displayOauthUrl.classList.remove('has-value');
   displayLocalhostUrl.textContent = '等待中...';
   displayLocalhostUrl.classList.remove('has-value');
+  setKiroRsConnectionTestStatus('未测试');
   inputEmail.value = '';
   if (typeof inputSignupPhone !== 'undefined' && inputSignupPhone) {
     inputSignupPhone.value = '';
@@ -13922,6 +13940,44 @@ btnGpcHelperBalance?.addEventListener('click', async () => {
   }
 });
 
+btnTestKiroRs?.addEventListener('click', async () => {
+  const defaultLabel = btnTestKiroRs.textContent || '测试';
+  btnTestKiroRs.disabled = true;
+  btnTestKiroRs.textContent = '测试中';
+  setKiroRsConnectionTestStatus('测试中...');
+  try {
+    await persistCurrentSettingsForAction();
+    const activeFlowId = typeof getSelectedFlowId === 'function'
+      ? getSelectedFlowId(latestState)
+      : 'kiro';
+    const targetId = typeof getSelectedTargetId === 'function'
+      ? getSelectedTargetId(activeFlowId)
+      : 'kiro-rs';
+    const response = await sendSidepanelMessage({
+      type: 'CHECK_KIRO_RS_CONNECTION',
+      payload: {
+        activeFlowId,
+        targetId,
+        baseUrl: String(inputKiroRsUrl?.value || '').trim(),
+        apiKey: String(inputKiroRsKey?.value || ''),
+      },
+    });
+    if (response?.error) {
+      throw new Error(response.error);
+    }
+    const message = String(response?.message || '').trim() || 'kiro.rs 测试完成。';
+    setKiroRsConnectionTestStatus(message);
+    showToast(message, response?.ok ? 'success' : 'error', response?.ok ? 2200 : 4200);
+  } catch (error) {
+    const message = error?.message || 'kiro.rs 测试失败。';
+    setKiroRsConnectionTestStatus(message);
+    showToast(message, 'error', 4200);
+  } finally {
+    btnTestKiroRs.disabled = false;
+    btnTestKiroRs.textContent = defaultLabel;
+  }
+});
+
 selectPlusPaymentMethod?.addEventListener('change', () => {
   updatePlusModeUI();
   const stepDefinitionState = typeof resolveStepDefinitionCapabilityState === 'function'
@@ -14161,6 +14217,7 @@ selectPanelMode.addEventListener('change', async () => {
 [inputKiroRsUrl, inputKiroRsKey].forEach((input) => {
   input?.addEventListener('input', () => {
     markSettingsDirty(true);
+    setKiroRsConnectionTestStatus('未测试');
     scheduleSettingsAutoSave();
   });
   input?.addEventListener('blur', () => {

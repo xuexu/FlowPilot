@@ -37,6 +37,7 @@
       exportSettingsBundle,
       fetchGeneratedEmail,
       refreshGpcCardBalance,
+      testKiroRsConnection,
       finalizePhoneActivationAfterSuccessfulFlow,
       finalizeStep3Completion,
       finalizeIcloudAliasAfterSuccessfulFlow,
@@ -1541,6 +1542,44 @@
             reason: message.payload?.reason,
           });
           return { ok: true, ...result };
+        }
+
+        case 'CHECK_KIRO_RS_CONNECTION': {
+          if (typeof testKiroRsConnection !== 'function') {
+            throw new Error('kiro.rs 连接测试能力尚未接入。');
+          }
+          const currentState = await getState();
+          const activeFlowId = normalizeMessageFlowId(
+            message.payload?.activeFlowId || currentState?.activeFlowId || 'kiro',
+            'kiro'
+          );
+          const targetId = normalizeMessageTargetId(
+            activeFlowId,
+            message.payload?.targetId || currentState?.kiroTargetId || 'kiro-rs',
+            'kiro-rs'
+          );
+          const nestedTargetConfig = currentState?.settingsState?.flows?.kiro?.targets?.[targetId]
+            || currentState?.flows?.kiro?.targets?.[targetId]
+            || {};
+          const baseUrl = String(
+            message.payload?.baseUrl
+            ?? nestedTargetConfig.baseUrl
+            ?? currentState?.kiroRsUrl
+            ?? ''
+          ).trim();
+          const apiKey = String(
+            message.payload?.apiKey
+            ?? nestedTargetConfig.apiKey
+            ?? currentState?.kiroRsKey
+            ?? ''
+          );
+          const result = await testKiroRsConnection(baseUrl, apiKey);
+          return {
+            ok: Boolean(result?.ok),
+            targetId,
+            status: Number(result?.status) || 0,
+            message: String(result?.message || '').trim(),
+          };
         }
 
         case 'RUN_IP_PROXY_AUTO_SYNC_NOW': {

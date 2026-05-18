@@ -112,6 +112,7 @@ test('kiro publisher reads latest kiro.rs key from background state instead of s
         url,
         method: options.method || 'GET',
         apiKey: options.headers?.['x-api-key'],
+        authorization: options.headers?.Authorization,
       });
       if ((options.method || 'GET') === 'GET') {
         return {
@@ -158,7 +159,45 @@ test('kiro publisher reads latest kiro.rs key from background state instead of s
 
   assert.equal(requests.length, 2);
   assert.equal(requests[0].apiKey, 'live-key');
+  assert.equal(requests[0].authorization, 'Bearer live-key');
   assert.equal(requests[1].apiKey, 'live-key');
+  assert.equal(requests[1].authorization, 'Bearer live-key');
   assert.equal(completed.length, 1);
   assert.equal(completed[0].nodeId, 'kiro-upload-credential');
+});
+
+test('kiro publisher trims api key and includes fallback Authorization header during connection check', async () => {
+  const api = loadPublisherApi();
+  const requests = [];
+
+  const result = await api.checkKiroRsConnection(
+    'https://kiro.example.com/admin',
+    ' live-key ',
+    async (url, options = {}) => {
+      requests.push({
+        url,
+        method: options.method || 'GET',
+        apiKey: options.headers?.['x-api-key'],
+        authorization: options.headers?.Authorization,
+      });
+      return {
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        text: async () => JSON.stringify({
+          error: {
+            message: 'Invalid or missing admin API key',
+          },
+        }),
+      };
+    }
+  );
+
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].method, 'GET');
+  assert.equal(requests[0].apiKey, 'live-key');
+  assert.equal(requests[0].authorization, 'Bearer live-key');
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 401);
+  assert.equal(result.message, 'kiro.rs API Key 被拒绝（HTTP 401：Invalid or missing admin API key）');
 });
