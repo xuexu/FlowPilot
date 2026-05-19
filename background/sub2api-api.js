@@ -503,15 +503,15 @@
       }
 
       const code = normalizeString(parsed.searchParams.get('code'));
-      const state = normalizeString(parsed.searchParams.get('state'));
-      if (!code || !state) {
+      const oauthState = normalizeString(parsed.searchParams.get('state'));
+      if (!code || !oauthState) {
         throw new Error('回调 URL 中缺少 code 或 state。');
       }
 
       return {
         url: parsed.toString(),
         code,
-        state,
+        state: oauthState,
       };
     }
 

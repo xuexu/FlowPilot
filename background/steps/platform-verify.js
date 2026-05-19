@@ -94,15 +94,15 @@
       }
 
       const code = normalizeString(parsed.searchParams.get('code'));
-      const state = normalizeString(parsed.searchParams.get('state'));
-      if (!code || !state) {
+      const oauthState = normalizeString(parsed.searchParams.get('state'));
+      if (!code || !oauthState) {
         throw new Error(`步骤 ${platformVerifyStep} 捕获到的 localhost OAuth 回调地址缺少 code 或 state，请重新执行步骤 ${confirmOauthStep}。`);
       }
 
       return {
         url: parsed.toString(),
         code,
-        state,
+        state: oauthState,
       };
     }
 

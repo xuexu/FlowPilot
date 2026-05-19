@@ -78,6 +78,7 @@ const SIGNUP_PAGE_NODE_HANDLERS = Object.freeze({
   'fill-password': (payload) => step3_fillEmailPassword(payload),
   'fill-profile': (payload) => step5_fillNameBirthday(payload),
   'oauth-login': (payload) => step6_login(payload),
+  'relogin-bound-email': (payload) => step6_login(payload),
   'confirm-oauth': (_payload) => step8_findAndClick(),
 });
 
