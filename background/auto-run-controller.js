@@ -93,17 +93,55 @@
       return String(getFirstUnfinishedWorkflowNode(freshState) || '').trim();
     }
 
+    function stripRuntimeProgressFromFreshKeepState(value) {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return value;
+      }
+      const next = {
+        ...value,
+      };
+      delete next.currentNodeId;
+      delete next.nodeStatuses;
+      delete next.stepStatuses;
+      if (next.runtimeState && typeof next.runtimeState === 'object' && !Array.isArray(next.runtimeState)) {
+        const runtimeState = {
+          ...next.runtimeState,
+        };
+        delete runtimeState.currentNodeId;
+        delete runtimeState.nodeStatuses;
+        if (runtimeState.sharedState && typeof runtimeState.sharedState === 'object' && !Array.isArray(runtimeState.sharedState)) {
+          const sharedState = {
+            ...runtimeState.sharedState,
+          };
+          delete sharedState.tabRegistry;
+          delete sharedState.sourceLastUrls;
+          delete sharedState.flowStartTime;
+          runtimeState.sharedState = sharedState;
+        }
+        next.runtimeState = runtimeState;
+      }
+      return next;
+    }
+
+    function buildFreshAttemptNodeStatuses(state = {}) {
+      const knownNodeIds = getKnownNodeIdsFromState(state);
+      if (knownNodeIds.length) {
+        return Object.fromEntries(knownNodeIds.map((nodeId) => [nodeId, 'pending']));
+      }
+      return {};
+    }
+
     function buildFreshAttemptKeepState(state = {}, context = {}) {
       if (typeof buildFreshAutoRunKeepState === 'function') {
         const helperPatch = buildFreshAutoRunKeepState(state, context);
         if (helperPatch && typeof helperPatch === 'object' && !Array.isArray(helperPatch)) {
-          return {
+          return stripRuntimeProgressFromFreshKeepState({
             ...helperPatch,
-          };
+          });
         }
       }
 
-      return {
+      return stripRuntimeProgressFromFreshKeepState({
         activeFlowId: state.activeFlowId,
         flowId: state.flowId || state.activeFlowId,
         targetId: state.targetId,
@@ -136,7 +174,7 @@
         cloudflareDomain: state.cloudflareDomain,
         cloudflareDomains: state.cloudflareDomains,
         reusablePhoneActivation: state.reusablePhoneActivation,
-      };
+      });
     }
 
     function createAutoRunRoundSummary(round) {
@@ -596,6 +634,8 @@
                 attemptRun,
                 sessionId,
               }),
+              currentNodeId: '',
+              nodeStatuses: buildFreshAttemptNodeStatuses(prevState),
               autoRunRoundSummaries: serializeAutoRunRoundSummaries(totalRuns, roundSummaries),
               autoRunSessionId: sessionId,
               tabRegistry: {},

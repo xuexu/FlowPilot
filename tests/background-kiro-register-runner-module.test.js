@@ -88,6 +88,7 @@ test('kiro submit-email stops immediately when AWS routes the email to login', a
     addLog: async () => {},
     chrome: {
       tabs: {
+        get: async (tabId) => ({ id: tabId, url: 'https://us-east-1.signin.aws/platform/d/signup' }),
         update: async () => {},
       },
     },
@@ -152,6 +153,7 @@ test('kiro submit-email can adopt an already-open registration OTP page without 
     addLog: async () => {},
     chrome: {
       tabs: {
+        get: async (tabId) => ({ id: tabId, url: 'https://us-east-1.signin.aws/platform/d/signup' }),
         update: async () => {},
       },
     },
@@ -179,4 +181,72 @@ test('kiro submit-email can adopt an already-open registration OTP page without 
   assert.equal(getKiroRuntime(completedPayload).register?.status, 'waiting_otp');
   assert.equal(getKiroRuntime(completedPayload).register?.verificationRequestedAt, 0);
   assert.equal(sentMessages.some((message) => message.type === 'EXECUTE_NODE'), false);
+});
+
+test('kiro submit-email reuses the step 1 register tab even when the source registry was reset', async () => {
+  const api = loadRegisterRunnerApi();
+  const currentState = {
+    runtimeState: {
+      flowState: {
+        kiro: {
+          session: {
+            registerTabId: 1770749825,
+          },
+          register: {
+            loginUrl: 'https://app.kiro.dev/signin',
+          },
+        },
+      },
+    },
+  };
+  const events = [];
+  const runner = api.createKiroRegisterRunner({
+    addLog: async () => {},
+    chrome: {
+      tabs: {
+        get: async (tabId) => {
+          events.push({ type: 'get', tabId });
+          return {
+            id: tabId,
+            url: 'https://us-east-1.signin.aws/platform/d-9067642ac7/signup',
+          };
+        },
+        update: async (tabId, payload) => {
+          events.push({ type: 'update', tabId, payload });
+        },
+      },
+    },
+    completeNodeFromBackground: async () => {},
+    getState: async () => currentState,
+    getTabId: async () => null,
+    isTabAlive: async () => false,
+    registerTab: async (source, tabId) => {
+      events.push({ type: 'register', source, tabId });
+    },
+    resolveSignupEmailForFlow: async () => 'fresh-user@duck.com',
+    reuseOrCreateTab: async () => {
+      events.push({ type: 'reuse-or-create' });
+      return 1770749826;
+    },
+    sendToContentScriptResilient: async (_sourceId, message) => {
+      if (message.type === 'ENSURE_KIRO_PAGE_STATE') {
+        return {
+          state: 'register_otp_page',
+          url: 'https://us-east-1.signin.aws/platform/d-9067642ac7/signup',
+          email: 'fresh-user@duck.com',
+        };
+      }
+      return {};
+    },
+    setState: async () => {},
+  });
+
+  await runner.executeKiroSubmitEmail({ nodeId: 'kiro-submit-email', ...currentState });
+
+  assert.equal(events.some((event) => event.type === 'reuse-or-create'), false);
+  assert.deepEqual(
+    events.filter((event) => event.type === 'register'),
+    [{ type: 'register', source: 'kiro-register-page', tabId: 1770749825 }]
+  );
+  assert.ok(events.some((event) => event.type === 'update' && event.tabId === 1770749825));
 });

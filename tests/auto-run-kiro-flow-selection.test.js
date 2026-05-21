@@ -198,6 +198,8 @@ test('auto-run controller preserves kiro flow across fresh reset and starts from
       assert.equal(currentState.flowId, 'kiro');
       assert.equal(currentState.kiroTargetId, 'kiro-rs');
       assert.equal(currentState.customFutureFlowField, 'future-ready');
+      assert.equal(currentState.nodeStatuses?.['kiro-open-register-page'], 'pending');
+      assert.equal(currentState.nodeStatuses?.['kiro-submit-email'], 'pending');
       currentState = {
         ...currentState,
         nodeStatuses: {
@@ -243,6 +245,176 @@ test('auto-run controller preserves kiro flow across fresh reset and starts from
 
   assert.deepStrictEqual(executedNodeIds, ['kiro-open-register-page']);
   assert.equal(helperCalls, 1);
+});
+
+test('auto-run controller clears stale kiro completed statuses before a fresh restart', async () => {
+  const source = fs.readFileSync('background/auto-run-controller.js', 'utf8');
+  const globalScope = {};
+  const api = new Function('self', `${source}; return self.MultiPageBackgroundAutoRunController;`)(globalScope);
+
+  const kiroNodeIds = [
+    'kiro-open-register-page',
+    'kiro-submit-email',
+    'kiro-submit-name',
+  ];
+  let currentState = {
+    activeFlowId: 'kiro',
+    flowId: 'kiro',
+    nodeStatuses: {
+      'kiro-open-register-page': 'completed',
+      'kiro-submit-email': 'pending',
+      'kiro-submit-name': 'pending',
+    },
+    runtimeState: {
+      activeFlowId: 'kiro',
+      currentNodeId: 'kiro-submit-email',
+      nodeStatuses: {
+        'kiro-open-register-page': 'completed',
+      },
+      flowState: {
+        kiro: {
+          register: {
+            loginUrl: '',
+          },
+        },
+      },
+    },
+    autoRunRoundSummaries: [],
+    autoRunSkipFailures: false,
+  };
+  const executedNodeIds = [];
+  let resetCalls = 0;
+  let sessionSeed = 1200;
+  const runtime = {
+    state: {
+      autoRunActive: false,
+      autoRunCurrentRun: 0,
+      autoRunTotalRuns: 1,
+      autoRunAttemptRun: 0,
+      autoRunSessionId: 0,
+    },
+    get() {
+      return { ...this.state };
+    },
+    set(updates = {}) {
+      this.state = { ...this.state, ...updates };
+    },
+  };
+
+  const controller = api.createAutoRunController({
+    addLog: async () => {},
+    appendAccountRunRecord: async () => null,
+    AUTO_RUN_MAX_RETRIES_PER_ROUND: 3,
+    AUTO_RUN_RETRY_DELAY_MS: 3000,
+    AUTO_RUN_TIMER_KIND_BEFORE_RETRY: 'before_retry',
+    AUTO_RUN_TIMER_KIND_BETWEEN_ROUNDS: 'between_rounds',
+    broadcastAutoRunStatus: async (_phase, payload = {}, extraState = {}) => {
+      currentState = { ...currentState, ...extraState, ...payload };
+    },
+    broadcastStopToContentScripts: async () => {},
+    buildFreshAutoRunKeepState: (prevState = {}) => ({
+      activeFlowId: prevState.activeFlowId,
+      flowId: prevState.flowId,
+      runtimeState: {
+        activeFlowId: 'kiro',
+        currentNodeId: 'kiro-submit-email',
+        nodeStatuses: {
+          'kiro-open-register-page': 'completed',
+        },
+        flowState: prevState.runtimeState?.flowState || {},
+      },
+    }),
+    cancelPendingCommands: () => {},
+    clearStopRequest: () => {},
+    createAutoRunSessionId: () => {
+      sessionSeed += 1;
+      return sessionSeed;
+    },
+    ensureHotmailMailboxReadyForAutoRunRound: async () => {},
+    getAutoRunStatusPayload: (phase, payload = {}) => ({
+      autoRunning: phase === 'running',
+      autoRunPhase: phase,
+      autoRunCurrentRun: payload.currentRun ?? 0,
+      autoRunTotalRuns: payload.totalRuns ?? 1,
+      autoRunAttemptRun: payload.attemptRun ?? 0,
+      autoRunSessionId: payload.sessionId ?? 0,
+    }),
+    getErrorMessage: (error) => error?.message || String(error || ''),
+    getFirstUnfinishedNodeId: (statuses = {}) => {
+      for (const nodeId of kiroNodeIds) {
+        const status = String(statuses?.[nodeId] || 'pending').trim();
+        if (!['completed', 'manual_completed', 'skipped'].includes(status)) {
+          return nodeId;
+        }
+      }
+      return '';
+    },
+    getPendingAutoRunTimerPlan: () => null,
+    getRunningNodeIds: () => [],
+    getState: async () => ({
+      ...currentState,
+      nodeStatuses: { ...(currentState.nodeStatuses || {}) },
+      runtimeState: currentState.runtimeState ? JSON.parse(JSON.stringify(currentState.runtimeState)) : undefined,
+    }),
+    getStopRequested: () => false,
+    hasSavedNodeProgress: () => false,
+    isAddPhoneAuthFailure: () => false,
+    isGpcTaskEndedFailure: () => false,
+    isKiroProxyFailure: () => false,
+    isPhoneSmsPlatformRateLimitFailure: () => false,
+    isPlusCheckoutNonFreeTrialFailure: () => false,
+    isRestartCurrentAttemptError: () => false,
+    isStep4Route405RecoveryLimitFailure: () => false,
+    isSignupUserAlreadyExistsFailure: () => false,
+    isStopError: () => false,
+    launchAutoRunTimerPlan: async () => false,
+    normalizeAutoRunFallbackThreadIntervalMinutes: () => 0,
+    persistAutoRunTimerPlan: async () => {},
+    resetState: async () => {
+      resetCalls += 1;
+      currentState = {
+        activeFlowId: 'kiro',
+        flowId: 'kiro',
+        nodeStatuses: {},
+        runtimeState: {
+          activeFlowId: 'kiro',
+          flowState: {},
+        },
+      };
+    },
+    runAutoSequenceFromNode: async (nodeId) => {
+      executedNodeIds.push(nodeId);
+      assert.equal(nodeId, 'kiro-open-register-page');
+      assert.equal(currentState.currentNodeId, '');
+      assert.equal(currentState.nodeStatuses['kiro-open-register-page'], 'pending');
+      assert.equal(currentState.nodeStatuses['kiro-submit-email'], 'pending');
+      assert.equal(currentState.runtimeState.currentNodeId, undefined);
+      assert.equal(currentState.runtimeState.nodeStatuses, undefined);
+      currentState.nodeStatuses = Object.fromEntries(kiroNodeIds.map((id) => [id, 'completed']));
+    },
+    runtime,
+    setState: async (updates = {}) => {
+      currentState = {
+        ...currentState,
+        ...updates,
+        nodeStatuses: updates.nodeStatuses ? { ...updates.nodeStatuses } : currentState.nodeStatuses,
+        runtimeState: updates.runtimeState ? JSON.parse(JSON.stringify(updates.runtimeState)) : currentState.runtimeState,
+      };
+    },
+    sleepWithStop: async () => {},
+    throwIfAutoRunSessionStopped: () => {},
+    waitForRunningNodesToFinish: async () => currentState,
+    chrome: {
+      runtime: {
+        sendMessage: () => Promise.resolve(),
+      },
+    },
+  });
+
+  await controller.autoRunLoop(1, { autoRunSkipFailures: false, mode: 'restart' });
+
+  assert.equal(resetCalls, 1);
+  assert.deepEqual(executedNodeIds, ['kiro-open-register-page']);
 });
 
 test('auto-run controller stops immediately on kiro proxy failures even when skip-failures is enabled', async () => {

@@ -162,6 +162,8 @@ test('kiro state reset helpers clear downstream runtime and fresh keep-state pre
   const keepState = api.buildFreshKeepState(currentState);
   assert.equal(keepState.targetId, 'kiro-rs');
   assert.equal(Object.prototype.hasOwnProperty.call(keepState, 'kiroRuntime'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(keepState.runtimeState, 'nodeStatuses'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(keepState.runtimeState, 'currentNodeId'), false);
   assert.equal(getKiroRuntime(keepState).register.email, '');
   assert.equal(getKiroRuntime(keepState).desktopAuth.refreshToken, '');
   assert.equal(getKiroRuntime(keepState).upload.status, '');

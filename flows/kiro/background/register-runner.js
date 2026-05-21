@@ -437,6 +437,13 @@
       await chrome.tabs.update(tabId, { active: true });
     }
 
+    async function isSpecificTabAlive(tabId) {
+      if (!Number.isInteger(tabId) || !chrome?.tabs?.get) {
+        return false;
+      }
+      return Boolean(await chrome.tabs.get(tabId).catch(() => null));
+    }
+
     async function getExecutionState(state = {}) {
       if (state && typeof state === 'object' && !Array.isArray(state) && Object.keys(state).length) {
         return state;
@@ -509,7 +516,8 @@
         : await getTabId(KIRO_REGISTER_PAGE_SOURCE_ID);
       const loginUrl = cleanString(runtimeState.register?.loginUrl);
 
-      if (Number.isInteger(tabId) && await isTabAlive(KIRO_REGISTER_PAGE_SOURCE_ID)) {
+      if (Number.isInteger(tabId) && await isSpecificTabAlive(tabId)) {
+        await registerTab(KIRO_REGISTER_PAGE_SOURCE_ID, tabId);
         return tabId;
       }
 

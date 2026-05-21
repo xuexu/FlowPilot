@@ -204,6 +204,17 @@
     const baseRuntimeState = isPlainObject(state?.runtimeState)
       ? cloneValue(state.runtimeState)
       : {};
+    delete baseRuntimeState.flowId;
+    delete baseRuntimeState.runId;
+    delete baseRuntimeState.activeFlowId;
+    delete baseRuntimeState.activeRunId;
+    delete baseRuntimeState.currentNodeId;
+    delete baseRuntimeState.nodeStatuses;
+    if (isPlainObject(baseRuntimeState.sharedState)) {
+      delete baseRuntimeState.sharedState.tabRegistry;
+      delete baseRuntimeState.sharedState.sourceLastUrls;
+      delete baseRuntimeState.sharedState.flowStartTime;
+    }
     const baseFlowState = isPlainObject(baseRuntimeState.flowState)
       ? cloneValue(baseRuntimeState.flowState)
       : {};
