@@ -197,14 +197,41 @@
         target: { tabId },
         func: () => {
           const textOf = (element) => String(element?.innerText || element?.textContent || element?.value || '').replace(/\s+/g, ' ').trim();
+          const isVisible = (element) => {
+            if (!element) return false;
+            const style = window.getComputedStyle ? window.getComputedStyle(element) : null;
+            if (style && (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0)) {
+              return false;
+            }
+            const rect = typeof element.getBoundingClientRect === 'function' ? element.getBoundingClientRect() : null;
+            return !rect || rect.width > 0 || rect.height > 0;
+          };
+          const hasActiveMarker = (element) => {
+            if (!element) return false;
+            const markerText = [
+              element.className,
+              element.getAttribute?.('class'),
+              element.getAttribute?.('aria-selected'),
+              element.getAttribute?.('aria-pressed'),
+              element.getAttribute?.('data-state'),
+              element.getAttribute?.('data-active'),
+            ].join(' ');
+            return /\b(active|selected|current|checked|on|true)\b/i.test(markerText);
+          };
           const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
           const startButton = buttons.find((button) => /开始\s*Plus\s*充值|任务进行中/.test(textOf(button)))
             || buttons.find((button) => /开始|任务/.test(textOf(button)));
+          const modeButtons = Array.from(document.querySelectorAll('button, [role="button"], .design-mode-card, .mode-card, [class*="mode"]'));
+          const cardModeButton = modeButtons.find((element) => /卡密充值/.test(textOf(element)));
+          const freeModeButton = modeButtons.find((element) => /免费充值/.test(textOf(element)));
           const bodyText = String(document.body?.innerText || document.documentElement?.innerText || '').replace(/\r/g, '');
           const logNodes = Array.from(document.querySelectorAll('[class*="log"], [id*="log"], .design-log, .logs, pre, code'));
           const logText = logNodes.map(textOf).filter(Boolean).join('\n') || bodyText;
-          const cardInputs = Array.from(document.querySelectorAll('input.card-key-seg, input[placeholder*="XXXXXXXX"], input[maxlength="8"]'));
+          const cardInputs = Array.from(document.querySelectorAll('input.card-key-seg, input[placeholder*="XXXXXXXX"], input[maxlength="8"]'))
+            .filter(isVisible);
           const sessionTextarea = document.querySelector('textarea.design-session-input') || document.querySelector('textarea');
+          const isCardModeActive = Boolean(cardModeButton && hasActiveMarker(cardModeButton))
+            || (cardInputs.length > 0 && !(freeModeButton && hasActiveMarker(freeModeButton)));
           return {
             url: location.href,
             readyState: document.readyState,
@@ -217,6 +244,74 @@
             hasStartButton: Boolean(startButton),
             cardKeyValue: cardInputs.map((input) => String(input.value || '')).join('-'),
             sessionLength: String(sessionTextarea?.value || '').length,
+            hasCardMode: Boolean(cardModeButton),
+            hasFreeMode: Boolean(freeModeButton),
+            isCardModeActive,
+            activeModeText: textOf(isCardModeActive ? cardModeButton : freeModeButton),
+          };
+        },
+      });
+      return results?.[0]?.result || {};
+    }
+
+    async function ensureGpcCardMode(tabId) {
+      if (!chrome?.scripting?.executeScript) {
+        throw new Error('步骤 7：当前运行环境不支持脚本注入，无法切换 GPC 卡密充值模式。');
+      }
+      const results = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => {
+          const textOf = (element) => String(element?.innerText || element?.textContent || element?.value || '').replace(/\s+/g, ' ').trim();
+          const isVisible = (element) => {
+            if (!element) return false;
+            const style = window.getComputedStyle ? window.getComputedStyle(element) : null;
+            if (style && (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0)) {
+              return false;
+            }
+            const rect = typeof element.getBoundingClientRect === 'function' ? element.getBoundingClientRect() : null;
+            return !rect || rect.width > 0 || rect.height > 0;
+          };
+          const hasActiveMarker = (element) => {
+            if (!element) return false;
+            const markerText = [
+              element.className,
+              element.getAttribute?.('class'),
+              element.getAttribute?.('aria-selected'),
+              element.getAttribute?.('aria-pressed'),
+              element.getAttribute?.('data-state'),
+              element.getAttribute?.('data-active'),
+            ].join(' ');
+            return /\b(active|selected|current|checked|on|true)\b/i.test(markerText);
+          };
+          const candidates = Array.from(document.querySelectorAll('button, [role="button"], .design-mode-card, .mode-card, [class*="mode"]'));
+          const cardModeButton = candidates.find((element) => /卡密充值/.test(textOf(element)));
+          const freeModeButton = candidates.find((element) => /免费充值/.test(textOf(element)));
+          const cardInputs = Array.from(document.querySelectorAll('input.card-key-seg, input[placeholder*="XXXXXXXX"], input[maxlength="8"]'))
+            .filter(isVisible);
+          const isCardModeActive = Boolean(cardModeButton && hasActiveMarker(cardModeButton))
+            || (cardInputs.length > 0 && !(freeModeButton && hasActiveMarker(freeModeButton)));
+          if (!cardModeButton) {
+            return {
+              ok: false,
+              reason: 'missing-card-mode',
+              activeModeText: textOf(freeModeButton),
+            };
+          }
+          if (isCardModeActive) {
+            return {
+              ok: true,
+              clicked: false,
+              isCardModeActive: true,
+              activeModeText: textOf(cardModeButton),
+            };
+          }
+          cardModeButton.scrollIntoView?.({ block: 'center', inline: 'center' });
+          cardModeButton.click?.();
+          return {
+            ok: true,
+            clicked: true,
+            isCardModeActive: false,
+            activeModeText: textOf(cardModeButton),
           };
         },
       });
@@ -231,7 +326,16 @@
         target: { tabId },
         func: () => {
           const textOf = (element) => String(element?.innerText || element?.textContent || element?.value || '').replace(/\s+/g, ' ').trim();
-          const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+          const isVisible = (element) => {
+            if (!element) return false;
+            const style = window.getComputedStyle ? window.getComputedStyle(element) : null;
+            if (style && (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0)) {
+              return false;
+            }
+            const rect = typeof element.getBoundingClientRect === 'function' ? element.getBoundingClientRect() : null;
+            return !rect || rect.width > 0 || rect.height > 0;
+          };
+          const buttons = Array.from(document.querySelectorAll('button, [role="button"]')).filter(isVisible);
           const button = buttons.find((candidate) => /开始\s*Plus\s*充值/.test(textOf(candidate)));
           if (!button) {
             return {
@@ -261,9 +365,7 @@
     async function executeGpcHelperBilling(state = {}) {
       const tabId = await getGpcPortalTabId(state);
       if (chrome?.tabs?.update) {
-        await chrome.tabs.update(tabId, { url: GPC_PORTAL_URL, active: true }).catch(() => (
-          chrome.tabs.update(tabId, { active: true }).catch(() => {})
-        ));
+        await chrome.tabs.update(tabId, { active: true }).catch(() => {});
       }
       await addLog('步骤 7：正在等待 GPC 页面加载完成...', 'info');
       await waitForTabCompleteUntilStopped(tabId);
@@ -308,6 +410,23 @@
 
         if (/任务进行中/.test(buttonText)) {
           await sleepWithStop(GPC_PAGE_POLL_INTERVAL_MS);
+          continue;
+        }
+
+        if (!pageState.isCardModeActive) {
+          const modeResult = await ensureGpcCardMode(tabId);
+          if (!modeResult.ok) {
+            throw new Error('GPC_PAGE_FLOW_ENDED::步骤 7：未找到 GPC“卡密充值”模式入口，无法启动 Plus 充值。');
+          }
+          await addLog(
+            modeResult.clicked
+              ? '步骤 7：已切换到 GPC 卡密充值模式，准备启动。'
+              : '步骤 7：GPC 卡密充值模式已就绪。',
+            'info'
+          );
+          if (modeResult.clicked) {
+            await sleepWithStop(800);
+          }
           continue;
         }
 

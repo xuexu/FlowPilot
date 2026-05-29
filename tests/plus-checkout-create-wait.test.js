@@ -873,6 +873,7 @@ function createFakeGpcPrepareDom() {
       scrollIntoView() {},
       click() {
         this.clicked = true;
+        this.onClick?.();
       },
       dispatchEvent(event) {
         dispatches.push({ element: this, type: event?.type || '' });
@@ -886,6 +887,11 @@ function createFakeGpcPrepareDom() {
 
   const freeButton = createElement({ tagName: 'BUTTON', text: '免费充值' });
   const cardModeButton = createElement({ tagName: 'BUTTON', text: '卡密充值 使用付费卡密扣次充值' });
+  freeButton.className = 'active';
+  cardModeButton.onClick = () => {
+    freeButton.className = '';
+    cardModeButton.className = 'active';
+  };
   const startButton = createElement({ tagName: 'BUTTON', text: '开始 Plus 充值' });
   const cardInputs = [
     createElement({ tagName: 'INPUT', placeholder: 'XXXXXXXX', className: 'card-key-seg' }),
@@ -1004,7 +1010,7 @@ test('GPC checkout prepare opens page, fills segmented card key, and writes full
     includeSession: true,
     includeAccessToken: true,
   });
-  const executeEvent = events.find((event) => event.type === 'execute-script');
+  const executeEvent = events.find((event) => event.type === 'execute-script' && Array.isArray(event.args));
   assert.equal(executeEvent.target.tabId, 77);
   assert.equal(executeEvent.args[1], JSON.stringify(session));
   const statePayload = events.find((event) => event.type === 'set-state')?.payload || {};

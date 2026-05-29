@@ -1396,6 +1396,69 @@ function FindProxyForURL(url, host) {
       }
       await waitForTabCompleteUntilStopped(tabId);
       await sleepWithStop(800);
+
+      const ensureCardMode = async () => {
+        const results = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: () => {
+            const textOf = (element) => String(element?.innerText || element?.textContent || element?.value || '').replace(/\s+/g, ' ').trim();
+            const isVisible = (element) => {
+              if (!element) return false;
+              const style = window.getComputedStyle ? window.getComputedStyle(element) : null;
+              if (style && (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0)) {
+                return false;
+              }
+              const rect = typeof element.getBoundingClientRect === 'function' ? element.getBoundingClientRect() : null;
+              return !rect || rect.width > 0 || rect.height > 0;
+            };
+            const hasActiveMarker = (element) => {
+              if (!element) return false;
+              const markerText = [
+                element.className,
+                element.getAttribute?.('class'),
+                element.getAttribute?.('aria-selected'),
+                element.getAttribute?.('aria-pressed'),
+                element.getAttribute?.('data-state'),
+                element.getAttribute?.('data-active'),
+              ].join(' ');
+              return /\b(active|selected|current|checked|on|true)\b/i.test(markerText);
+            };
+            const candidates = Array.from(document.querySelectorAll('button, [role="button"], .design-mode-card, .mode-card, [class*="mode"]'));
+            const cardModeButton = candidates.find((element) => /卡密充值/.test(textOf(element)));
+            const freeModeButton = candidates.find((element) => /免费充值/.test(textOf(element)));
+            const visibleCardInputs = Array.from(document.querySelectorAll('input.card-key-seg, input[placeholder*="XXXXXXXX"], input[maxlength="8"]'))
+              .filter(isVisible);
+            const isCardModeActive = Boolean(cardModeButton && hasActiveMarker(cardModeButton))
+              || (visibleCardInputs.length > 0 && !(freeModeButton && hasActiveMarker(freeModeButton)));
+            if (cardModeButton && !isCardModeActive) {
+              cardModeButton.scrollIntoView?.({ block: 'center', inline: 'center' });
+              cardModeButton.click?.();
+              return {
+                hasCardMode: true,
+                clickedCardMode: true,
+                isCardModeActive: false,
+                activeModeText: textOf(cardModeButton),
+              };
+            }
+            return {
+              hasCardMode: Boolean(cardModeButton),
+              clickedCardMode: false,
+              isCardModeActive,
+              activeModeText: textOf(isCardModeActive ? cardModeButton : freeModeButton),
+            };
+          },
+        });
+        return results?.[0]?.result || {};
+      };
+
+      const modeResult = await ensureCardMode();
+      if (!modeResult.hasCardMode) {
+        throw new Error('步骤 6：未找到 GPC“卡密充值”模式入口。');
+      }
+      if (modeResult.clickedCardMode) {
+        await sleepWithStop(600);
+      }
+
       const results = await chrome.scripting.executeScript({
         target: { tabId },
         func: (rawCardKey, rawSessionJson) => {
@@ -1416,17 +1479,21 @@ function FindProxyForURL(url, host) {
             element.dispatchEvent?.(new Event('change', { bubbles: true }));
             element.blur?.();
           };
-          const clickElement = (element) => {
-            element.scrollIntoView?.({ block: 'center', inline: 'center' });
-            element.click?.();
+          const hasActiveMarker = (element) => {
+            if (!element) return false;
+            const markerText = [
+              element.className,
+              element.getAttribute?.('class'),
+              element.getAttribute?.('aria-selected'),
+              element.getAttribute?.('aria-pressed'),
+              element.getAttribute?.('data-state'),
+              element.getAttribute?.('data-active'),
+            ].join(' ');
+            return /\b(active|selected|current|checked|on|true)\b/i.test(markerText);
           };
           const modeButtons = Array.from(document.querySelectorAll('button, [role="button"], .design-mode-card, .mode-card'));
           const cardModeButton = modeButtons.find((element) => /卡密充值/.test(textOf(element)));
-          if (cardModeButton && !/\bactive\b/i.test(String(cardModeButton.className || ''))) {
-            clickElement(cardModeButton);
-          } else if (cardModeButton) {
-            clickElement(cardModeButton);
-          }
+          const freeModeButton = modeButtons.find((element) => /免费充值/.test(textOf(element)));
 
           const compactCardKey = String(rawCardKey || '').trim().replace(/\s+/g, '');
           const explicitSegments = compactCardKey.includes('-') || compactCardKey.includes('_')
@@ -1437,11 +1504,14 @@ function FindProxyForURL(url, host) {
             : (compactCardKey.match(/.{1,8}/g) || []);
           const cardInputs = Array.from(document.querySelectorAll('input.card-key-seg, input[placeholder*="XXXXXXXX"], input[maxlength="8"]'))
             .filter(isVisible);
+          const isCardModeActive = Boolean(cardModeButton && hasActiveMarker(cardModeButton))
+            || (cardInputs.length > 0 && !(freeModeButton && hasActiveMarker(freeModeButton)));
           cardInputs.forEach((input, index) => {
             dispatchInput(input, cardSegments[index] || '');
           });
+          let fallbackInput = null;
           if (!cardInputs.length) {
-            const fallbackInput = Array.from(document.querySelectorAll('input')).find((input) => /卡密|card/i.test([
+            fallbackInput = Array.from(document.querySelectorAll('input')).find((input) => /卡密|card/i.test([
               input.placeholder,
               input.name,
               input.id,
@@ -1468,10 +1538,12 @@ function FindProxyForURL(url, host) {
           return {
             ok: true,
             cardInputCount: cardInputs.length,
+            cardFallbackFilled: Boolean(fallbackInput),
             cardSegments: cardSegments.map((segment) => segment ? segment.length : 0),
+            isCardModeActive,
             sessionLength: String(sessionTextarea.value || '').length,
             startButtonText: textOf(startButton),
-            activeModeText: textOf(cardModeButton),
+            activeModeText: textOf(isCardModeActive ? cardModeButton : freeModeButton),
             url: location.href,
           };
         },
@@ -1480,6 +1552,9 @@ function FindProxyForURL(url, host) {
       const result = results?.[0]?.result || {};
       if (!result?.ok) {
         throw new Error('步骤 6：GPC 页面准备失败。');
+      }
+      if (!result.isCardModeActive || (!result.cardInputCount && !result.cardFallbackFilled)) {
+        throw new Error('步骤 6：GPC 页面未进入卡密充值模式，无法填写卡密。');
       }
       return result;
     }

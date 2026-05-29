@@ -903,10 +903,23 @@ test('Plus checkout billing reports when the payment iframe exists but cannot re
 function createGpcPageHarness(states) {
   const pageStates = Array.isArray(states) ? [...states] : [];
   const clicks = [];
+  const modeClicks = [];
   return {
     clicks,
+    modeClicks,
     run(details) {
       const source = String(details.func || '');
+      if (source.includes('cardModeButton.click')) {
+        modeClicks.push({ target: details.target?.tabId });
+        return [{
+          result: {
+            ok: true,
+            clicked: true,
+            isCardModeActive: false,
+            activeModeText: '卡密充值 使用付费卡密扣次充值',
+          },
+        }];
+      }
       if (source.includes('button.click')) {
         clicks.push({ target: details.target?.tabId });
         return [{ result: { clicked: true, buttonText: '开始 Plus 充值' } }];
@@ -925,6 +938,10 @@ function createGpcPageHarness(states) {
           hasStartButton: true,
           cardKeyValue: 'AAAA1111-BBBB2222-CCCC3333',
           sessionLength: 256,
+          hasCardMode: state.hasCardMode !== false,
+          hasFreeMode: true,
+          isCardModeActive: state.isCardModeActive !== false,
+          activeModeText: state.isCardModeActive === false ? '免费充值' : '卡密充值 使用付费卡密扣次充值',
         },
       }];
     },
@@ -1003,6 +1020,26 @@ test('GPC billing clicks start and completes after page log shows subscription d
   assert.equal(events.completed[0].step, 'plus-checkout-billing');
   assert.equal(events.completed[0].payload.plusCheckoutSource, 'gpc-helper');
   assert.equal(events.states.some((state) => state.gpcPageStatus === 'completed'), true);
+});
+
+test('GPC billing keeps prepared page, switches card mode, and clicks start instead of reloading home', async () => {
+  const { events, executor, pageHarness } = createGpcPageExecutorHarness([
+    { startButtonText: '停止当前任务', logText: '免费充值任务进行中', isCardModeActive: false },
+    { startButtonText: '开始 Plus 充值', logText: 'SYSTEM 页面已就绪', isCardModeActive: true },
+    { startButtonText: '任务进行中', logText: '开始处理任务', isCardModeActive: true },
+    { startButtonText: '开始 Plus 充值', logText: '订阅完成', hasSubscriptionDone: true, isCardModeActive: true },
+  ]);
+
+  await executor.executePlusCheckoutBilling({
+    plusPaymentMethod: 'gpc-helper',
+    plusCheckoutSource: 'gpc-helper',
+    plusCheckoutTabId: 77,
+  });
+
+  assert.equal(pageHarness.modeClicks.length, 1);
+  assert.equal(pageHarness.clicks.length, 1);
+  assert.equal(events.updates.some((event) => event.payload?.url === 'https://gpc.qlhazycoder.top/'), false);
+  assert.equal(events.completed.length, 1);
 });
 
 test('GPC billing restarts when start button returns without subscription done', async () => {
