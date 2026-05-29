@@ -1282,6 +1282,21 @@ function FindProxyForURL(url, host) {
       return cardKey;
     }
 
+    function resolveGpcCardKeySegments(cardKey = '') {
+      const text = String(cardKey || '').trim().toUpperCase();
+      const compact = text.replace(/\s+/g, '');
+      const rawSegments = compact.includes('-') || compact.includes('_')
+        ? compact.split(/[-_]+/).filter(Boolean)
+        : (compact.replace(/^GPC[-_]?/i, '').match(/.{1,8}/g) || []);
+      const withoutPrefix = rawSegments[0] === 'GPC' ? rawSegments.slice(1) : rawSegments;
+      const segments = withoutPrefix.slice(0, 3)
+        .map((segment) => String(segment || '').replace(/[^A-Z0-9]/g, '').toUpperCase());
+      if (segments.length !== 3 || segments.some((segment) => !/^[A-Z0-9]{8}$/.test(segment))) {
+        throw new Error('步骤 6：GPC 卡密格式不正确，应为 GPC-XXXXXXXX-XXXXXXXX-XXXXXXXX。');
+      }
+      return segments;
+    }
+
     function buildGpcPortalUrl(state = {}) {
       const baseUrl = normalizeGpcBaseUrl(state?.gpcBaseUrl || DEFAULT_GPC_BASE_URL)
         .replace(/\/+$/g, '');
@@ -1391,7 +1406,7 @@ function FindProxyForURL(url, host) {
       return session;
     }
 
-    async function prepareGpcPortalPage(tabId, cardKey = '', sessionJson = '') {
+    async function prepareGpcCardKeyOnPortalPage(tabId, cardSegments = []) {
       if (!chrome?.scripting?.executeScript) {
         throw new Error('步骤 6：当前运行环境不支持脚本注入，无法填写 GPC 页面。');
       }
@@ -1507,7 +1522,7 @@ function FindProxyForURL(url, host) {
 
       const results = await chrome.scripting.executeScript({
         target: { tabId },
-        func: (rawCardKey, rawSessionJson) => {
+        func: (rawCardSegments) => {
           const textOf = (element) => String(element?.innerText || element?.textContent || element?.value || '').replace(/\s+/g, ' ').trim();
           const isVisible = (element) => {
             if (!element) return false;
@@ -1541,13 +1556,9 @@ function FindProxyForURL(url, host) {
           const cardModeButton = modeButtons.find((element) => /卡密充值/.test(textOf(element)));
           const freeModeButton = modeButtons.find((element) => /免费充值/.test(textOf(element)));
 
-          const compactCardKey = String(rawCardKey || '').trim().replace(/\s+/g, '');
-          const explicitSegments = compactCardKey.includes('-') || compactCardKey.includes('_')
-            ? compactCardKey.split(/[-_]+/).filter(Boolean)
+          const cardSegments = Array.isArray(rawCardSegments)
+            ? rawCardSegments.map((segment) => String(segment || '').replace(/[^A-Z0-9]/gi, '').toUpperCase()).slice(0, 3)
             : [];
-          const cardSegments = explicitSegments.length
-            ? explicitSegments
-            : (compactCardKey.match(/.{1,8}/g) || []);
           const cardInputs = Array.from(document.querySelectorAll('input.card-key-seg, input[placeholder*="XXXXXXXX"], input[maxlength="8"]'))
             .filter(isVisible);
           const isCardModeActive = Boolean(cardModeButton && hasActiveMarker(cardModeButton))
@@ -1564,10 +1575,58 @@ function FindProxyForURL(url, host) {
               input.className,
             ].join(' ')));
             if (fallbackInput) {
-              dispatchInput(fallbackInput, compactCardKey);
+              dispatchInput(fallbackInput, `GPC-${cardSegments.join('-')}`);
             }
           }
 
+          const startButton = Array.from(document.querySelectorAll('button, [role="button"]'))
+            .find((button) => /开始\s*Plus\s*充值|任务进行中/.test(textOf(button)));
+          const filledSegments = cardInputs.map((input) => String(input.value || '').replace(/\s+/g, '').toUpperCase());
+          const cardKeyMatches = cardSegments.length === 3
+            && cardInputs.length >= 3
+            && cardSegments.every((segment, index) => filledSegments[index] === segment);
+          return {
+            ok: true,
+            cardInputCount: cardInputs.length,
+            cardFallbackFilled: Boolean(fallbackInput),
+            cardSegments: cardSegments.map((segment) => segment ? segment.length : 0),
+            cardKeyMatches,
+            cardKeyValue: filledSegments.join('-') || String(fallbackInput?.value || ''),
+            isCardModeActive,
+            startButtonText: textOf(startButton),
+            activeModeText: textOf(isCardModeActive ? cardModeButton : freeModeButton),
+            url: location.href,
+          };
+        },
+        args: [cardSegments],
+      });
+      const result = results?.[0]?.result || {};
+      if (!result?.ok) {
+        throw new Error('步骤 6：GPC 页面准备失败。');
+      }
+      if (!result.isCardModeActive || (!result.cardInputCount && !result.cardFallbackFilled)) {
+        throw new Error('步骤 6：GPC 页面未进入卡密充值模式，无法填写卡密。');
+      }
+      if (result.cardInputCount >= 3 && !result.cardKeyMatches) {
+        throw new Error(`步骤 6：GPC 卡密填写校验失败，当前页面为 ${result.cardKeyValue || '空'}。`);
+      }
+      return result;
+    }
+
+    async function fillGpcSessionOnPortalPage(tabId, sessionJson = '') {
+      if (!chrome?.scripting?.executeScript) {
+        throw new Error('步骤 6：当前运行环境不支持脚本注入，无法填写 GPC session。');
+      }
+      const results = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: (rawSessionJson) => {
+          const dispatchInput = (element, value) => {
+            element.focus?.();
+            element.value = value;
+            element.dispatchEvent?.(new Event('input', { bubbles: true }));
+            element.dispatchEvent?.(new Event('change', { bubbles: true }));
+            element.blur?.();
+          };
           const sessionTextarea = Array.from(document.querySelectorAll('textarea')).find((textarea) => /session|accessToken|完整/i.test([
             textarea.placeholder,
             textarea.name,
@@ -1578,37 +1637,27 @@ function FindProxyForURL(url, host) {
             throw new Error('未找到 GPC session 输入框。');
           }
           dispatchInput(sessionTextarea, String(rawSessionJson || ''));
-
-          const startButton = Array.from(document.querySelectorAll('button, [role="button"]'))
-            .find((button) => /开始\s*Plus\s*充值|任务进行中/.test(textOf(button)));
           return {
             ok: true,
-            cardInputCount: cardInputs.length,
-            cardFallbackFilled: Boolean(fallbackInput),
-            cardSegments: cardSegments.map((segment) => segment ? segment.length : 0),
-            isCardModeActive,
             sessionLength: String(sessionTextarea.value || '').length,
-            startButtonText: textOf(startButton),
-            activeModeText: textOf(isCardModeActive ? cardModeButton : freeModeButton),
-            url: location.href,
           };
         },
-        args: [cardKey, sessionJson],
+        args: [sessionJson],
       });
       const result = results?.[0]?.result || {};
       if (!result?.ok) {
-        throw new Error('步骤 6：GPC 页面准备失败。');
-      }
-      if (!result.isCardModeActive || (!result.cardInputCount && !result.cardFallbackFilled)) {
-        throw new Error('步骤 6：GPC 页面未进入卡密充值模式，无法填写卡密。');
+        throw new Error('步骤 6：GPC session 填写失败。');
       }
       return result;
     }
 
     async function executeGpcCheckoutCreate(state = {}) {
       const cardKey = resolveGpcCardKey(state);
+      const cardSegments = resolveGpcCardKeySegments(cardKey);
       await addLog('步骤 6：正在打开 GPC 页面并准备卡密充值模式...', 'info');
       const { tabId, portalUrl } = await openOrReuseGpcPortalTab(state);
+      await addLog('步骤 6：正在切换 GPC 卡密充值模式并校验卡密...', 'info');
+      const prepared = await prepareGpcCardKeyOnPortalPage(tabId, cardSegments);
       await addLog('步骤 6：正在从 ChatGPT 获取完整 session...', 'info');
       const sessionTabId = await openFreshChatGptTabForCheckoutCreate({ active: false });
       if (chrome?.tabs?.update) {
@@ -1630,8 +1679,8 @@ function FindProxyForURL(url, host) {
       if (chrome?.tabs?.update) {
         await chrome.tabs.update(tabId, { active: true }).catch(() => {});
       }
-      await addLog('步骤 6：正在填写 GPC 卡密和 ChatGPT session...', 'info');
-      const prepared = await prepareGpcPortalPage(tabId, cardKey, sessionJson);
+      await addLog('步骤 6：GPC 卡密已确认，正在填写 ChatGPT session...', 'info');
+      const sessionFilled = await fillGpcSessionOnPortalPage(tabId, sessionJson);
       await setState({
         plusCheckoutTabId: tabId,
         plusCheckoutUrl: portalUrl,
@@ -1642,7 +1691,7 @@ function FindProxyForURL(url, host) {
         gpcPageStatusText: '页面已准备',
       });
       await addLog(
-        `步骤 6：GPC 页面已准备完成（卡密 ${prepared.cardInputCount || 0} 段，session ${prepared.sessionLength || 0} 字符），准备继续下一步。`,
+        `步骤 6：GPC 页面已准备完成（卡密 ${prepared.cardInputCount || 0} 段，session ${sessionFilled.sessionLength || 0} 字符），准备继续下一步。`,
         'ok'
       );
       await completeNodeFromBackground('plus-checkout-create', {

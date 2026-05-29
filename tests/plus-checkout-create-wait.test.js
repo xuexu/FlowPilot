@@ -958,7 +958,12 @@ test('GPC checkout prepare opens page, fills segmented card key, and writes full
       },
       scripting: {
         executeScript: async (details) => {
-          events.push({ type: 'execute-script', target: details.target, args: details.args });
+          events.push({
+            type: 'execute-script',
+            target: details.target,
+            args: details.args,
+            phase: Array.isArray(details.args?.[0]) ? 'card-key' : 'session',
+          });
           const previous = {
             document: global.document,
             window: global.window,
@@ -999,20 +1004,31 @@ test('GPC checkout prepare opens page, fills segmented card key, and writes full
 
   await executor.executePlusCheckoutCreate({
     plusPaymentMethod: 'gpc-helper',
-    gpcCardKey: 'AAAA1111BBBB2222CCCC3333',
+    gpcCardKey: 'GPC-AAAA1111-BBBB2222-CCCC3333',
   });
 
   assert.equal(dom.cardModeButton.clicked, true);
   assert.deepEqual(dom.cardInputs.map((input) => input.value), ['AAAA1111', 'BBBB2222', 'CCCC3333']);
   assert.equal(dom.sessionTextarea.value, JSON.stringify(session));
+  const cardFillIndex = events.findIndex((event) => event.type === 'execute-script' && event.phase === 'card-key');
+  const chatGptCreateIndex = events.findIndex((event) => (
+    event.type === 'automation-tab-create'
+    && event.payload?.url === 'https://chatgpt.com/'
+  ));
+  const sessionFillIndex = events.findIndex((event) => event.type === 'execute-script' && event.phase === 'session' && Array.isArray(event.args));
+  assert.notEqual(cardFillIndex, -1);
+  assert.notEqual(chatGptCreateIndex, -1);
+  assert.notEqual(sessionFillIndex, -1);
+  assert.equal(cardFillIndex < chatGptCreateIndex, true);
+  assert.equal(chatGptCreateIndex < sessionFillIndex, true);
   const sessionMessage = events.find((event) => event.type === 'tab-message');
   assert.deepEqual(sessionMessage.message.payload, {
     includeSession: true,
     includeAccessToken: true,
   });
-  const executeEvent = events.find((event) => event.type === 'execute-script' && Array.isArray(event.args));
+  const executeEvent = events.find((event) => event.type === 'execute-script' && event.phase === 'session' && Array.isArray(event.args));
   assert.equal(executeEvent.target.tabId, 77);
-  assert.equal(executeEvent.args[1], JSON.stringify(session));
+  assert.equal(executeEvent.args[0], JSON.stringify(session));
   const chatGptTabCreate = events.find((event) => (
     event.type === 'automation-tab-create'
     && event.payload?.url === 'https://chatgpt.com/'
