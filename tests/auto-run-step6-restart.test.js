@@ -1012,6 +1012,34 @@ test('auto-run does not restart GPC checkout when account already has a ChatGPT 
   assert.ok(!result.events.logs.some(({ message }) => /回到节点 plus-checkout-create 重新准备 GPC 页面/.test(message)));
 });
 
+test('auto-run does not restart GPC checkout when page-ended error contains Plus trial-ineligible token guidance', async () => {
+  const plusGpcSteps = {
+    6: { key: 'plus-checkout-create' },
+    7: { key: 'plus-checkout-billing' },
+    10: { key: 'oauth-login' },
+  };
+  const harness = createHarness({
+    startStep: 6,
+    failureStep: 7,
+    failureBudget: 1,
+    failureMessage: 'GPC_PAGE_FLOW_ENDED::步骤 7：GPC 页面已尝试启动 10 次仍未显示订阅完成。最近日志：[13:44:04] ERROR 任务失败：该账号不具备 Plus 试用资格，请更换有试用资格的账号 Token。。',
+    stepDefinitions: plusGpcSteps,
+    finalOAuthChainStartStep: 10,
+    customState: {
+      stepStatuses: { 3: 'completed' },
+      plusPaymentMethod: 'gpc-helper',
+      plusCheckoutSource: 'gpc-helper',
+    },
+  });
+
+  const result = await harness.runAndCaptureError();
+
+  assert.ok(result?.error);
+  assert.deepStrictEqual(result.events.steps, [6, 7]);
+  assert.equal(result.events.invalidations.length, 0);
+  assert.ok(!result.events.logs.some(({ message }) => /回到节点 plus-checkout-create 重新准备 GPC 页面/.test(message)));
+});
+
 test('auto-run does not reroute SUB2API session import failures into OAuth restarts', async () => {
   const plusSessionSteps = {
     6: { key: 'plus-checkout-create' },

@@ -9821,7 +9821,7 @@ function isPhoneSmsPlatformRateLimitFailure(error) {
 
 function isPlusCheckoutNonFreeTrialFailure(error) {
   const message = getErrorMessage(error);
-  return /PLUS_CHECKOUT_NON_FREE_TRIAL::|今日应付金额不是\s*0|没有免费试用资格|该账号已经开通过\s*ChatGPT\s*订阅套餐，不能重复订阅(?:。)?(?:（\s*checkout_order\s*）|\(\s*checkout_order\s*\))?/i.test(message);
+  return /PLUS_CHECKOUT_NON_FREE_TRIAL::|今日应付金额不是\s*0|(?:没有|无|不具备)[\s:：-]*(?:免费\s*|Plus\s*)?试用资格|更换有试用资格的账号\s*Token|not\s+eligible\s+for\s+(?:a\s+)?Plus\s+trial|no\s+Plus\s+trial\s+eligibility|该账号已经开通过\s*ChatGPT\s*订阅套餐，不能重复订阅(?:。)?(?:（\s*checkout_order\s*）|\(\s*checkout_order\s*\))?/i.test(message);
 }
 
 function isGpcPageFlowEndedFailure(error) {
@@ -9833,7 +9833,7 @@ function isGpcCheckoutRestartRequiredFailure(error) {
   const rawMessage = String(typeof error === 'string' ? error : error?.message || '');
   const message = getErrorMessage(error);
   const combinedMessage = `${rawMessage}\n${message}`;
-  if (/PLUS_CHECKOUT_NON_FREE_TRIAL::|今日应付金额不是\s*0|没有免费试用资格/i.test(combinedMessage)) {
+  if (isPlusCheckoutNonFreeTrialFailure(combinedMessage)) {
     return false;
   }
   if (/GPC_PAGE_FLOW_ENDED::/i.test(rawMessage)) {

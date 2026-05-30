@@ -253,7 +253,7 @@
             logText,
             lastLogLine,
             hasSubscriptionDone: /订阅完成/.test(logText) || /订阅完成/.test(bodyText),
-            noTrial: /该账户没有试用资格|该账号没有试用资格|没有试用资格/.test(logText) || /该账户没有试用资格|该账号没有试用资格|没有试用资格/.test(bodyText),
+            noTrial: /该账户没有试用资格|该账号没有试用资格|没有试用资格|不具备\s*(?:Plus\s*)?试用资格|更换有试用资格的账号\s*Token/.test(logText) || /该账户没有试用资格|该账号没有试用资格|没有试用资格|不具备\s*(?:Plus\s*)?试用资格|更换有试用资格的账号\s*Token/.test(bodyText),
             startButtonText: textOf(startButton),
             startButtonDisabled: Boolean(startButton?.disabled || startButton?.getAttribute?.('aria-disabled') === 'true'),
             hasStartButton: Boolean(startButton),
@@ -298,7 +298,7 @@
         pageState.logText,
         pageState.bodyText,
       ].filter(Boolean).join(' '));
-      return /(?:该|此|当前)?账[户号].{0,12}(?:没有|无|不具备).{0,8}试用资格|(?:没有|无|不具备).{0,8}试用资格/.test(text);
+      return /(?:该|此|当前)?账[户号].{0,16}(?:没有|无|不具备).{0,12}(?:Plus\s*)?试用资格|(?:没有|无|不具备).{0,12}(?:Plus\s*)?试用资格|更换有试用资格的账号\s*Token/.test(text);
     }
 
     async function ensureGpcCardMode(tabId) {
