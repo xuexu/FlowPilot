@@ -858,3 +858,133 @@ test('generated email helper forwards preserve identity context to the iCloud ge
   assert.equal(icloudOptions[0].state.signupPhoneNumber, '+447780579093');
   assert.equal(icloudOptions[0].state.emailGenerator, 'icloud');
 });
+
+test('generated email helper keeps Duck page mode as the default', async () => {
+  const api = loadGeneratedEmailHelpersApi();
+  const requests = [];
+  let tokenCalls = 0;
+
+  const helpers = api.createGeneratedEmailHelpers({
+    addLog: async () => {},
+    buildGeneratedAliasEmail: () => {
+      throw new Error('should not build managed alias');
+    },
+    buildCloudflareTempEmailHeaders: () => ({}),
+    CLOUDFLARE_TEMP_EMAIL_GENERATOR: 'cloudflare-temp-email',
+    DUCK_AUTOFILL_URL: 'https://duckduckgo.com/email',
+    fetch: async () => ({ ok: true, text: async () => '{}' }),
+    fetchDuckEmailWithToken: async () => {
+      tokenCalls += 1;
+      throw new Error('should not use token mode');
+    },
+    fetchIcloudHideMyEmail: async () => {
+      throw new Error('should not use icloud generator');
+    },
+    getCloudflareTempEmailAddressFromResponse: () => '',
+    getCloudflareTempEmailConfig: () => ({ baseUrl: '', adminAuth: '', domain: '' }),
+    getRegistrationEmailBaseline: (state, options = {}) => options.preferredEmail || options.fallbackEmail || state.email,
+    getState: async () => ({}),
+    ensureMail2925AccountForFlow: async () => {
+      throw new Error('should not allocate mail2925 account');
+    },
+    joinCloudflareTempEmailUrl: () => '',
+    normalizeCloudflareDomain: () => '',
+    normalizeCloudflareTempEmailAddress: () => '',
+    normalizeDuckDdgToken: (value) => String(value || '').replace(/^Bearer\s+/i, '').trim(),
+    normalizeDuckEmailGenerationMode: (value) => String(value || '').trim().toLowerCase() === 'token' ? 'token' : 'page',
+    normalizeEmailGenerator: (value) => String(value || '').trim().toLowerCase(),
+    isGeneratedAliasProvider: () => false,
+    reuseOrCreateTab: async () => {},
+    sendToContentScript: async (_source, message) => {
+      requests.push(message);
+      return { email: 'fresh@duck.com', generated: true };
+    },
+    setEmailState: async () => {},
+    throwIfStopped: () => {},
+  });
+
+  const email = await helpers.fetchGeneratedEmail({
+    email: 'old@duck.com',
+    emailGenerator: 'duck',
+    duckEmailGenerationMode: 'page',
+    mailProvider: 'gmail',
+  }, {
+    generator: 'duck',
+  });
+
+  assert.equal(email, 'fresh@duck.com');
+  assert.equal(tokenCalls, 0);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].type, 'FETCH_DUCK_EMAIL');
+});
+
+test('generated email helper uses Duck token mode when selected', async () => {
+  const api = loadGeneratedEmailHelpersApi();
+  const tokenRequests = [];
+  const savedEmails = [];
+
+  const helpers = api.createGeneratedEmailHelpers({
+    addLog: async () => {},
+    buildGeneratedAliasEmail: () => {
+      throw new Error('should not build managed alias');
+    },
+    buildCloudflareTempEmailHeaders: () => ({}),
+    CLOUDFLARE_TEMP_EMAIL_GENERATOR: 'cloudflare-temp-email',
+    DUCK_AUTOFILL_URL: 'https://duckduckgo.com/email',
+    fetch: async () => ({ ok: true, text: async () => '{}' }),
+    fetchDuckEmailWithToken: async (state, options) => {
+      tokenRequests.push({ state, options });
+      return { email: 'token@duck.com', token: options.duckDdgToken };
+    },
+    fetchIcloudHideMyEmail: async () => {
+      throw new Error('should not use icloud generator');
+    },
+    getCloudflareTempEmailAddressFromResponse: () => '',
+    getCloudflareTempEmailConfig: () => ({ baseUrl: '', adminAuth: '', domain: '' }),
+    getRegistrationEmailBaseline: (state, options = {}) => options.preferredEmail || options.fallbackEmail || state.email,
+    getState: async () => ({}),
+    ensureMail2925AccountForFlow: async () => {
+      throw new Error('should not allocate mail2925 account');
+    },
+    joinCloudflareTempEmailUrl: () => '',
+    normalizeCloudflareDomain: () => '',
+    normalizeCloudflareTempEmailAddress: () => '',
+    normalizeDuckDdgToken: (value) => String(value || '').replace(/^Bearer\s+/i, '').trim(),
+    normalizeDuckEmailGenerationMode: (value) => String(value || '').trim().toLowerCase() === 'token' ? 'token' : 'page',
+    normalizeEmailGenerator: (value) => String(value || '').trim().toLowerCase(),
+    isGeneratedAliasProvider: () => false,
+    reuseOrCreateTab: async () => {
+      throw new Error('should not open duck page when token is configured');
+    },
+    sendToContentScript: async () => {
+      throw new Error('should not use page content script');
+    },
+    setEmailState: async (email, options) => {
+      savedEmails.push({ email, options });
+    },
+    throwIfStopped: () => {},
+  });
+
+  const email = await helpers.fetchGeneratedEmail({
+    email: 'old@duck.com',
+    emailGenerator: 'duck',
+    duckEmailGenerationMode: 'token',
+    duckDdgToken: 'state-token',
+    mailProvider: 'gmail',
+  }, {
+    generator: 'duck',
+    duckDdgToken: 'Bearer option-token',
+  });
+
+  assert.equal(email, 'token@duck.com');
+  assert.equal(tokenRequests.length, 1);
+  assert.equal(tokenRequests[0].options.duckDdgToken, 'option-token');
+  assert.equal(tokenRequests[0].options.baselineEmail, 'old@duck.com');
+  assert.deepEqual(savedEmails, [{
+    email: 'token@duck.com',
+    options: {
+      source: 'generated:duck',
+      preserveAccountIdentity: false,
+    },
+  }]);
+});

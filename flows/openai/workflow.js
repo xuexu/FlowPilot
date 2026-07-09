@@ -16,6 +16,8 @@
   const PLUS_REGISTRATION_WAIT_STEP_KEY = 'wait-registration-success';
   const OPENAI_WEBCHAT_TARGET_ID = 'webchat';
   const OPENAI_WEBCHAT_UPLOAD_STEP_KEY = 'openai-upload-session-to-webchat';
+  const OPENAI_CHATGPT2API_TARGET_ID = 'chatgpt2api';
+  const OPENAI_CHATGPT2API_UPLOAD_STEP_KEY = 'openai-upload-session-to-chatgpt2api';
 
   function freezeDeep(entry) {
     if (!entry || typeof entry !== 'object' || Object.isFrozen(entry)) {
@@ -2511,6 +2513,17 @@
     };
   }
 
+  function getOpenAiChatgpt2ApiUploadStep() {
+    return {
+      key: OPENAI_CHATGPT2API_UPLOAD_STEP_KEY,
+      title: '上传 ChatGPT 会话到 ChatGPT2API',
+      sourceId: 'openai-chatgpt2api',
+      driverId: 'flows/openai/background/publisher-chatgpt2api',
+      command: OPENAI_CHATGPT2API_UPLOAD_STEP_KEY,
+      flowId: 'openai',
+    };
+  }
+
   function getPlusRegistrationWaitStep() {
     const sourceStep = STEP_VARIANTS.normal.find((step) => step.key === PLUS_REGISTRATION_WAIT_STEP_KEY);
     return {
@@ -2608,6 +2621,18 @@
     return String(options?.targetId || '').trim().toLowerCase() === OPENAI_WEBCHAT_TARGET_ID;
   }
 
+  function isOpenAiChatgpt2ApiUploadEnabled(options = {}) {
+    return String(options?.targetId || '').trim().toLowerCase() === OPENAI_CHATGPT2API_TARGET_ID;
+  }
+
+  function isOpenAiChatgpt2ApiTarget(options = {}) {
+    return String(options?.targetId || '').trim().toLowerCase() === OPENAI_CHATGPT2API_TARGET_ID;
+  }
+
+  function isOpenAiRemotePublicationTarget(options = {}) {
+    return isOpenAiWebchatTarget(options) || isOpenAiChatgpt2ApiTarget(options);
+  }
+
   function normalizePlusAccountAccessStrategy(value = '') {
     const normalized = String(value || '').trim().toLowerCase();
     if (normalized === PLUS_ACCOUNT_ACCESS_STRATEGY_SUB2API_CODEX_SESSION) {
@@ -2701,13 +2726,19 @@
     if (!isPhoneVerificationEnabled(options)) {
       steps = omitPostLoginPhoneVerificationSteps(steps);
     }
-    if (isOpenAiWebchatTarget(options)) {
+    if (isOpenAiRemotePublicationTarget(options)) {
       steps = omitOpenAiWebchatPublicationSteps(steps);
     }
     if (isOpenAiWebchatUploadEnabled(options) && !steps.some((step) => step.key === OPENAI_WEBCHAT_UPLOAD_STEP_KEY)) {
       steps = [
         ...steps,
         getOpenAiWebchatUploadStep(),
+      ];
+    }
+    if (isOpenAiChatgpt2ApiUploadEnabled(options) && !steps.some((step) => step.key === OPENAI_CHATGPT2API_UPLOAD_STEP_KEY)) {
+      steps = [
+        ...steps,
+        getOpenAiChatgpt2ApiUploadStep(),
       ];
     }
     return reindexModeStepDefinitions(steps);
@@ -2729,6 +2760,13 @@
     ]).at(-1);
     if (uploadStep) {
       keyed.set(`${uploadStep.id}:${uploadStep.key}`, uploadStep);
+    }
+    const chatgpt2ApiUploadStep = reindexModeStepDefinitions([
+      ...STEP_VARIANTS.normal,
+      getOpenAiChatgpt2ApiUploadStep(),
+    ]).at(-1);
+    if (chatgpt2ApiUploadStep) {
+      keyed.set(`${chatgpt2ApiUploadStep.id}:${chatgpt2ApiUploadStep.key}`, chatgpt2ApiUploadStep);
     }
     return Array.from(keyed.values()).sort((left, right) => {
       const leftOrder = Number.isFinite(left.order) ? left.order : left.id;

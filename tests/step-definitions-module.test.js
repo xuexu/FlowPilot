@@ -460,12 +460,13 @@ test('OpenAI OAuth workflow removes post-login phone verification when phone ver
   });
 });
 
-test('OpenAI webchat upload is appended only for webchat target', () => {
+test('OpenAI remote upload is appended only for remote publication targets', () => {
   const globalScope = {};
   const api = new Function('self', `${readStepDefinitionsBundle()}; return self.MultiPageStepDefinitions;`)(globalScope);
 
   const normalKeys = api.getSteps({ targetId: 'cpa' }).map((step) => step.key);
   assert.equal(normalKeys.includes('openai-upload-session-to-webchat'), false);
+  assert.equal(normalKeys.includes('openai-upload-session-to-chatgpt2api'), false);
 
   const webchatSteps = api.getSteps({ targetId: 'webchat' });
   const webchatNodes = api.getNodes({ targetId: 'webchat' });
@@ -498,11 +499,43 @@ test('OpenAI webchat upload is appended only for webchat target', () => {
   );
   assert.deepStrictEqual(webchatNodes.at(-1)?.next, []);
 
+  const chatgpt2ApiSteps = api.getSteps({ targetId: 'chatgpt2api' });
+  const chatgpt2ApiNodes = api.getNodes({ targetId: 'chatgpt2api' });
+  const chatgpt2ApiKeys = chatgpt2ApiSteps.map((step) => step.key);
+  assert.deepStrictEqual(chatgpt2ApiKeys, [
+    'open-chatgpt',
+    'submit-signup-email',
+    'fill-password',
+    'fetch-signup-code',
+    'fill-profile',
+    'wait-registration-success',
+    'openai-upload-session-to-chatgpt2api',
+  ]);
+  assert.equal(chatgpt2ApiSteps.at(-1)?.key, 'openai-upload-session-to-chatgpt2api');
+  assert.equal(chatgpt2ApiSteps.at(-1)?.sourceId, 'openai-chatgpt2api');
+  assert.equal(chatgpt2ApiSteps.at(-1)?.driverId, 'flows/openai/background/publisher-chatgpt2api');
+  [
+    'oauth-login',
+    'fetch-login-code',
+    'post-login-phone-verification',
+    'confirm-oauth',
+    'platform-verify',
+  ].forEach((key) => {
+    assert.equal(chatgpt2ApiKeys.includes(key), false);
+    assert.equal(chatgpt2ApiNodes.some((node) => node.nodeId === key), false);
+  });
+  assert.deepStrictEqual(
+    chatgpt2ApiNodes.find((node) => node.nodeId === 'wait-registration-success')?.next,
+    ['openai-upload-session-to-chatgpt2api']
+  );
+  assert.deepStrictEqual(chatgpt2ApiNodes.at(-1)?.next, []);
+
   const cpaSyncSteps = api.getSteps({
     targetId: 'cpa',
     openaiWebchatUploadEnabled: true,
   });
   assert.equal(cpaSyncSteps.some((step) => step.key === 'openai-upload-session-to-webchat'), false);
+  assert.equal(cpaSyncSteps.some((step) => step.key === 'openai-upload-session-to-chatgpt2api'), false);
 
   const schemaSyncSteps = api.getSteps({
     targetId: 'sub2api',
@@ -515,6 +548,7 @@ test('OpenAI webchat upload is appended only for webchat target', () => {
     },
   });
   assert.equal(schemaSyncSteps.some((step) => step.key === 'openai-upload-session-to-webchat'), false);
+  assert.equal(schemaSyncSteps.some((step) => step.key === 'openai-upload-session-to-chatgpt2api'), false);
 });
 
 test('Plus session strategy swaps the OAuth tail for a single SUB2API import node', () => {

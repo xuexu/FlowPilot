@@ -425,6 +425,95 @@ test('flow capability registry disables phone settings for OpenAI webchat target
   );
 });
 
+test('flow capability registry validates OpenAI ChatGPT2API target configuration without touching Plus strategy', () => {
+  const api = loadApi();
+  const registry = api.createFlowCapabilityRegistry();
+
+  const missingConfigResult = registry.validateAutoRunStart({
+    state: {
+      activeFlowId: 'openai',
+      targetId: 'chatgpt2api',
+      signupMethod: 'email',
+      plusModeEnabled: true,
+      plusAccountAccessStrategy: 'cpa_codex_session',
+    },
+  });
+
+  assert.equal(missingConfigResult.ok, false);
+  assert.equal(missingConfigResult.errors[0].code, 'openai_chatgpt2api_config_required');
+  assert.equal(missingConfigResult.capabilityState.openaiChatgpt2Api.targetIsChatgpt2Api, true);
+  assert.equal(missingConfigResult.capabilityState.stepDefinitionOptions.openaiChatgpt2ApiUploadEnabled, true);
+  assert.equal(missingConfigResult.capabilityState.stepDefinitionOptions.openaiWebchatUploadEnabled, false);
+  assert.equal(missingConfigResult.capabilityState.effectivePlusAccountAccessStrategy, 'oauth');
+
+  const configuredState = registry.resolveSidepanelCapabilities({
+    state: {
+      activeFlowId: 'openai',
+      targetId: 'chatgpt2api',
+      openaiChatgpt2ApiUrl: 'https://chatgpt2api.example.com/admin',
+      openaiChatgpt2ApiAdminKey: 'admin-key',
+      plusModeEnabled: true,
+      plusAccountAccessStrategy: 'cpa_codex_session',
+    },
+  });
+
+  assert.equal(configuredState.openaiChatgpt2Api.configComplete, true);
+  assert.equal(configuredState.openaiChatgpt2Api.uploadRequired, true);
+  assert.equal(configuredState.stepDefinitionOptions.openaiChatgpt2ApiUploadEnabled, true);
+  assert.equal(configuredState.stepDefinitionOptions.openaiWebchatUploadEnabled, false);
+  assert.deepEqual(configuredState.availablePlusAccountAccessStrategies, ['oauth']);
+  assert.equal(configuredState.effectivePlusAccountAccessStrategy, 'oauth');
+});
+
+test('flow capability registry disables phone settings for OpenAI ChatGPT2API target', () => {
+  const api = loadApi();
+  const registry = api.createFlowCapabilityRegistry();
+
+  const capabilityState = registry.resolveSidepanelCapabilities({
+    state: {
+      activeFlowId: 'openai',
+      targetId: 'chatgpt2api',
+      phoneVerificationEnabled: true,
+      signupMethod: 'phone',
+      openaiChatgpt2ApiUrl: 'https://chatgpt2api.example.com/admin',
+      openaiChatgpt2ApiAdminKey: 'admin-key',
+    },
+  });
+
+  assert.equal(capabilityState.canShowPhoneSettings, false);
+  assert.equal(capabilityState.runtimeLocks.phoneVerificationEnabled, false);
+  assert.equal(capabilityState.canUsePhoneSignup, false);
+  assert.equal(capabilityState.effectiveSignupMethod, 'email');
+  assert.deepEqual(capabilityState.effectiveSignupMethods, ['email']);
+  assert.equal(capabilityState.stepDefinitionOptions.phoneVerificationEnabled, false);
+  assert.equal(capabilityState.stepDefinitionOptions.signupMethod, 'email');
+  assert.equal(capabilityState.stepDefinitionOptions.openaiChatgpt2ApiUploadEnabled, true);
+  assert.deepEqual(
+    capabilityState.visibleGroupIds,
+    ['openai-plus', 'shared-auto-run', 'openai-oauth', 'openai-step6', 'openai-target-chatgpt2api', 'service-account', 'service-email', 'service-proxy']
+  );
+
+  const validation = registry.validateModeSwitch({
+    state: {
+      activeFlowId: 'openai',
+      targetId: 'chatgpt2api',
+      phoneVerificationEnabled: true,
+      signupMethod: 'phone',
+      openaiChatgpt2ApiUrl: 'https://chatgpt2api.example.com/admin',
+      openaiChatgpt2ApiAdminKey: 'admin-key',
+    },
+    changedKeys: ['targetId', 'phoneVerificationEnabled', 'signupMethod'],
+  });
+
+  assert.equal(validation.ok, false);
+  assert.equal(validation.normalizedUpdates.phoneVerificationEnabled, false);
+  assert.equal(validation.normalizedUpdates.signupMethod, 'email');
+  assert.deepEqual(
+    validation.errors.map((entry) => entry.code),
+    ['phone_verification_unsupported', 'phone_signup_panel_unsupported']
+  );
+});
+
 test('flow capability registry ignores hidden OpenAI webchat add-on upload outside webchat target', () => {
   const api = loadApi();
   const registry = api.createFlowCapabilityRegistry();

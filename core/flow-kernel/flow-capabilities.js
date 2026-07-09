@@ -16,7 +16,7 @@
     ? Object.keys(flowRegistryApi.getTargetDefinitions('openai') || {})
     : (Array.isArray(flowRegistryApi.OPENAI_TARGET_IDS)
       ? flowRegistryApi.OPENAI_TARGET_IDS.slice()
-      : ['cpa', 'sub2api', 'codex2api']);
+      : ['cpa', 'sub2api', 'codex2api', 'webchat', 'chatgpt2api']);
   const REGISTERED_FLOW_IDS = Array.isArray(flowRegistryApi.getRegisteredFlowIds?.())
     ? flowRegistryApi.getRegisteredFlowIds().map((flowId) => String(flowId || '').trim().toLowerCase()).filter(Boolean)
     : [DEFAULT_FLOW_ID];
@@ -78,6 +78,8 @@
     'openaiWebchatUrl',
     'openaiWebchatAdminKey',
     'openaiWebchatUploadEnabled',
+    'openaiChatgpt2ApiUrl',
+    'openaiChatgpt2ApiAdminKey',
   ]);
 
   const OPENAI_TARGET_CAPABILITIES = Object.freeze(
@@ -191,6 +193,9 @@
     if (normalized === 'cpa') {
       return 'CPA';
     }
+    if (normalized === 'chatgpt2api') {
+      return 'ChatGPT2API';
+    }
     return normalized || String(targetId || '').trim();
   }
 
@@ -285,6 +290,30 @@
       };
     }
 
+    function resolveOpenAiChatgpt2ApiState(state = {}, targetId = '') {
+      const openAiFlow = getOpenAiFlowSettingsFromState(state);
+      const targetConfig = isPlainObject(openAiFlow?.targets?.chatgpt2api)
+        ? openAiFlow.targets.chatgpt2api
+        : {};
+      const baseUrl = cleanString(hasOwn(state, 'openaiChatgpt2ApiUrl')
+        ? state.openaiChatgpt2ApiUrl
+        : targetConfig.baseUrl);
+      const apiKey = cleanString(hasOwn(state, 'openaiChatgpt2ApiAdminKey')
+        ? state.openaiChatgpt2ApiAdminKey
+        : targetConfig.apiKey);
+      const normalizedTargetId = String(targetId || '').trim().toLowerCase();
+      const targetIsChatgpt2Api = normalizedTargetId === 'chatgpt2api';
+      const missingFields = [];
+      if (!baseUrl) missingFields.push('baseUrl');
+      if (!apiKey) missingFields.push('apiKey');
+      return {
+        configComplete: missingFields.length === 0,
+        missingFields,
+        targetIsChatgpt2Api,
+        uploadRequired: targetIsChatgpt2Api,
+      };
+    }
+
     function buildOpenAiWebchatValidationError(capabilityState = {}) {
       const webchatState = capabilityState.openaiWebchat || {};
       if (webchatState.targetIsWebchat) {
@@ -296,6 +325,13 @@
       return {
         code: 'openai_webchat_upload_config_required',
         message: '请选择 webchat 来源并完成配置后再开启同步。',
+      };
+    }
+
+    function buildOpenAiChatgpt2ApiValidationError() {
+      return {
+        code: 'openai_chatgpt2api_config_required',
+        message: 'ChatGPT2API source requires URL and Admin Key configuration.',
       };
     }
 
@@ -488,6 +524,14 @@
           uploadEnabled: false,
           uploadRequired: false,
         };
+      const openaiChatgpt2Api = activeFlowId === 'openai'
+        ? resolveOpenAiChatgpt2ApiState(state, effectiveTargetId)
+        : {
+          configComplete: true,
+          missingFields: [],
+          targetIsChatgpt2Api: false,
+          uploadRequired: false,
+        };
 
       return {
         activeFlowId,
@@ -505,6 +549,7 @@
         effectiveSignupMethods,
         effectiveTargetId,
         flowCapabilities: flowState,
+        openaiChatgpt2Api,
         openaiWebchat,
         panelCapabilities: targetState,
         requestedPlusAccountAccessStrategy,
@@ -520,6 +565,7 @@
           plusAccountAccessStrategy: effectivePlusAccountAccessStrategy,
           plusModeEnabled: runtimeLocks.plusModeEnabled,
           phoneVerificationEnabled: runtimeLocks.phoneVerificationEnabled,
+          openaiChatgpt2ApiUploadEnabled: openaiChatgpt2Api.uploadRequired,
           openaiWebchatUploadEnabled: openaiWebchat.uploadRequired,
           signupMethod: effectiveSignupMethod,
         },
@@ -615,6 +661,13 @@
         && !capabilityState.openaiWebchat?.configComplete
       ) {
         errors.push(buildOpenAiWebchatValidationError(capabilityState));
+      }
+      if (
+        capabilityState.activeFlowId === 'openai'
+        && capabilityState.openaiChatgpt2Api?.uploadRequired
+        && !capabilityState.openaiChatgpt2Api?.configComplete
+      ) {
+        errors.push(buildOpenAiChatgpt2ApiValidationError(capabilityState));
       }
 
       return {

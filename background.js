@@ -52,7 +52,9 @@ importScripts(
   'flows/grok/background/publisher-webchat2api.js',
   'flows/openai/background/session-reader.js',
   'flows/openai/background/publisher-webchat.js',
+  'flows/openai/background/publisher-chatgpt2api.js',
   'background/email-local-part-helpers.js',
+  'background/duck-token-provider.js',
   'background/generated-email-helpers.js',
   'background/signup-flow-helpers.js',
   'background/mail-rule-registry.js',
@@ -1282,6 +1284,12 @@ const PERSISTED_SETTING_DEFAULTS = {
   openaiWebchatUploadedAt: 0,
   openaiWebchatUploadMessage: '',
   openaiWebchatTargetUrl: '',
+  openaiChatgpt2ApiUrl: '',
+  openaiChatgpt2ApiAdminKey: '',
+  openaiChatgpt2ApiUploadStatus: '',
+  openaiChatgpt2ApiUploadedAt: 0,
+  openaiChatgpt2ApiUploadMessage: '',
+  openaiChatgpt2ApiTargetUrl: '',
   vpsUrl: '',
   vpsPassword: '',
   localCpaStep9Mode: DEFAULT_LOCAL_CPA_STEP9_MODE,
@@ -1363,6 +1371,8 @@ const PERSISTED_SETTING_DEFAULTS = {
   customMailReceiveMode: DEFAULT_CUSTOM_MAIL_RECEIVE_MODE,
   customMailHelperBaseUrl: DEFAULT_CUSTOM_MAIL_HELPER_BASE_URL,
   emailGenerator: 'duck',
+  duckEmailGenerationMode: 'page',
+  duckDdgToken: '',
   customMailProviderPool: [],
   customEmailPool: [],
   customEmailPoolEntries: [],
@@ -1493,6 +1503,8 @@ const SETTINGS_SCHEMA_VIEW_KEYS = Object.freeze([
   'openaiWebchatUrl',
   'openaiWebchatAdminKey',
   'openaiWebchatUploadEnabled',
+  'openaiChatgpt2ApiUrl',
+  'openaiChatgpt2ApiAdminKey',
   'stepExecutionRangeByFlow',
 ]);
 const SETTINGS_SCHEMA_VIEW_KEY_SET = new Set(SETTINGS_SCHEMA_VIEW_KEYS);
@@ -2560,6 +2572,23 @@ function normalizeEmailGenerator(value = '') {
   return 'duck';
 }
 
+function normalizeDuckEmailGenerationMode(value = '') {
+  if (typeof self.MultiPageBackgroundDuckTokenProvider?.normalizeDuckEmailGenerationMode === 'function') {
+    return self.MultiPageBackgroundDuckTokenProvider.normalizeDuckEmailGenerationMode(value);
+  }
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['token', 'ddg-token', 'api', 'direct'].includes(normalized) ? 'token' : 'page';
+}
+
+function normalizeDuckDdgToken(value = '') {
+  if (typeof self.MultiPageBackgroundDuckTokenProvider?.normalizeDuckDdgToken === 'function') {
+    return self.MultiPageBackgroundDuckTokenProvider.normalizeDuckDdgToken(value);
+  }
+  const trimmed = String(value || '').trim();
+  const bearerMatch = trimmed.match(/^Bearer\s+(.+)$/i);
+  return (bearerMatch ? bearerMatch[1] : trimmed).trim();
+}
+
 function normalizeIcloudFetchMode(value = '') {
   const normalized = String(value || '').trim().toLowerCase();
   return normalized === 'always_new' ? 'always_new' : 'reuse_existing';
@@ -3244,18 +3273,24 @@ function normalizePersistentSettingValue(key, value) {
     case 'kiroRsUrl':
     case 'grokWebchat2ApiUrl':
     case 'openaiWebchatUrl':
+    case 'openaiChatgpt2ApiUrl':
       return String(value || '').trim();
     case 'kiroRsKey':
     case 'grokWebchat2ApiAdminKey':
     case 'openaiWebchatAdminKey':
+    case 'openaiChatgpt2ApiAdminKey':
       return String(value || '').trim();
     case 'openaiWebchatUploadEnabled':
       return Boolean(value);
     case 'openaiWebchatUploadStatus':
     case 'openaiWebchatUploadMessage':
     case 'openaiWebchatTargetUrl':
+    case 'openaiChatgpt2ApiUploadStatus':
+    case 'openaiChatgpt2ApiUploadMessage':
+    case 'openaiChatgpt2ApiTargetUrl':
       return String(value || '').trim();
     case 'openaiWebchatUploadedAt':
+    case 'openaiChatgpt2ApiUploadedAt':
       return Math.max(0, Number(value) || 0);
     case 'vpsUrl':
       return String(value || '').trim();
@@ -3464,6 +3499,10 @@ function normalizePersistentSettingValue(key, value) {
       return normalizeCustomMailHelperBaseUrl(value);
     case 'emailGenerator':
       return normalizeEmailGenerator(value);
+    case 'duckEmailGenerationMode':
+      return normalizeDuckEmailGenerationMode(value);
+    case 'duckDdgToken':
+      return normalizeDuckDdgToken(value);
     case 'customMailProviderPool':
     case 'customEmailPool':
       return normalizeCustomEmailPool(value);
@@ -3923,6 +3962,8 @@ function buildSettingsStatePatchFromFlatUpdates(updates = {}) {
     setSettingsStatePatchValue(patch, ['flows', 'grok', 'targets', 'webchat2api', 'apiKey'], sharedWebchatAdminKey);
   }
   assignIfUpdated('openaiWebchatUploadEnabled', ['flows', 'openai', 'webchatUpload', 'enabled']);
+  assignIfUpdated('openaiChatgpt2ApiUrl', ['flows', 'openai', 'targets', 'chatgpt2api', 'baseUrl']);
+  assignIfUpdated('openaiChatgpt2ApiAdminKey', ['flows', 'openai', 'targets', 'chatgpt2api', 'apiKey']);
 
   if (hasUpdate('stepExecutionRangeByFlow') && isPlainObjectValue(updates.stepExecutionRangeByFlow)) {
     Object.entries(updates.stepExecutionRangeByFlow).forEach(([rawFlowId, range]) => {
@@ -12221,6 +12262,18 @@ function getCurrentPayPalAccount(state = null) {
   return payPalAccountStore?.getCurrentPayPalAccount?.(state || {}) || null;
 }
 
+const duckTokenProvider = self.MultiPageBackgroundDuckTokenProvider?.createDuckTokenProvider({
+  addLog,
+  broadcastDataUpdate,
+  chromeApi: chrome,
+  DUCK_AUTOFILL_URL,
+  fetchImpl: fetch,
+  reuseOrCreateTab,
+  sendToContentScript,
+  setPersistentSettings,
+  throwIfStopped,
+});
+
 const generatedEmailHelpers = self.MultiPageGeneratedEmailHelpers?.createGeneratedEmailHelpers({
   addLog,
   buildGeneratedAliasEmail,
@@ -12237,7 +12290,10 @@ const generatedEmailHelpers = self.MultiPageGeneratedEmailHelpers?.createGenerat
   getRegistrationEmailBaseline,
   getState,
   ensureMail2925AccountForFlow,
+  fetchDuckEmailWithToken: duckTokenProvider?.fetchDuckEmailWithToken,
   joinCloudflareTempEmailUrl,
+  normalizeDuckDdgToken,
+  normalizeDuckEmailGenerationMode,
   normalizeCloudflareDomain,
   normalizeCloudflareTempEmailAddress,
   normalizeEmailGenerator,
@@ -14388,6 +14444,22 @@ const openAiWebchatPublisher = self.MultiPageBackgroundOpenAiPublisherWebchat?.c
   sleepWithStop,
   waitForTabCompleteUntilStopped,
 });
+const openAiChatgpt2ApiPublisher = self.MultiPageBackgroundOpenAiPublisherChatgpt2Api?.createOpenAiChatgpt2ApiPublisher({
+  addLog,
+  broadcastDataUpdate,
+  chrome,
+  completeNodeFromBackground,
+  ensureContentScriptReadyOnTabUntilStopped,
+  fetchImpl: typeof fetch === 'function' ? fetch.bind(globalThis) : null,
+  getState,
+  getTabId,
+  isTabAlive,
+  registerTab,
+  sendTabMessageUntilStopped,
+  setState,
+  sleepWithStop,
+  waitForTabCompleteUntilStopped,
+});
 const step10Executor = self.MultiPageBackgroundStep10?.createStep10Executor({
   addLog,
   chrome,
@@ -14461,6 +14533,7 @@ const stepExecutorsByKey = {
   'sub2api-session-import': (state) => sub2ApiSessionImportExecutor.executeSub2ApiSessionImport(state),
   'cpa-session-import': (state) => cpaSessionImportExecutor.executeCpaSessionImport(state),
   'openai-upload-session-to-webchat': (state) => openAiWebchatPublisher.executeOpenAiUploadSessionToWebchat(state),
+  'openai-upload-session-to-chatgpt2api': (state) => openAiChatgpt2ApiPublisher.executeOpenAiUploadSessionToChatgpt2Api(state),
   'oauth-login': (state) => step7Executor.executeStep7(state),
   'fetch-login-code': (state) => step8Executor.executeStep8(state),
   'post-login-phone-verification': (state) => step8Executor.executePostLoginPhoneVerification(state),

@@ -18,7 +18,10 @@
       getRegistrationEmailBaseline,
       getState,
       ensureMail2925AccountForFlow,
+      fetchDuckEmailWithToken = null,
       joinCloudflareTempEmailUrl,
+      normalizeDuckDdgToken = (value = '') => String(value || '').trim(),
+      normalizeDuckEmailGenerationMode = (value = '') => (String(value || '').trim().toLowerCase() === 'token' ? 'token' : 'page'),
       normalizeCloudflareDomain,
       normalizeCloudflareTempEmailAddress,
       normalizeEmailGenerator,
@@ -249,6 +252,27 @@
       return result.email;
     }
 
+    async function fetchDuckEmailViaToken(state, options = {}) {
+      if (typeof fetchDuckEmailWithToken !== 'function') {
+        throw new Error('DuckDuckGo Token 直连能力尚未接入。');
+      }
+      throwIfStopped();
+      const latestState = state || await getState();
+      const result = await fetchDuckEmailWithToken(latestState, {
+        ...options,
+        duckDdgToken: normalizeDuckDdgToken(options.duckDdgToken ?? latestState.duckDdgToken),
+      });
+      const email = String(result?.email || '').trim().toLowerCase();
+      if (!email) {
+        throw new Error('DuckDuckGo Token 直连未返回可用邮箱。');
+      }
+      await persistResolvedEmailState(latestState, email, {
+        source: 'generated:duck',
+        preserveAccountIdentity: Boolean(options?.preserveAccountIdentity),
+      });
+      return email;
+    }
+
     async function fetchCustomEmailPoolEmail(state, options = {}) {
       throwIfStopped();
       const latestState = state || await getState();
@@ -325,6 +349,12 @@
         mail2925Mode,
         emailGenerator: generator,
       };
+      if (options.duckEmailGenerationMode !== undefined) {
+        mergedState.duckEmailGenerationMode = normalizeDuckEmailGenerationMode(options.duckEmailGenerationMode);
+      }
+      if (options.duckDdgToken !== undefined) {
+        mergedState.duckDdgToken = normalizeDuckDdgToken(options.duckDdgToken);
+      }
       if (options.gmailBaseEmail !== undefined) {
         mergedState.gmailBaseEmail = String(options.gmailBaseEmail || '').trim();
       }
@@ -379,6 +409,15 @@
           || mergedState.email
           || ''
         ).trim();
+      const duckMode = normalizeDuckEmailGenerationMode(
+        options.duckEmailGenerationMode ?? mergedState.duckEmailGenerationMode
+      );
+      if (duckMode === 'token') {
+        return fetchDuckEmailViaToken(mergedState, {
+          ...options,
+          baselineEmail: resolvedDuckBaselineEmail,
+        });
+      }
       return fetchDuckEmail({
         ...options,
         state: mergedState,

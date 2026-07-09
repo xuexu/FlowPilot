@@ -275,6 +275,26 @@
         <span class="data-label">上传状态</span>
         <span id="display-openai-webchat-upload-status" class="data-value mono truncate">未开始</span>
       </div>
+      <div class="data-row" id="row-openai-chatgpt2api-url" style="display:none;">
+        <span class="data-label">ChatGPT2API</span>
+        <input type="text" id="input-openai-chatgpt2api-url" class="data-input"
+          placeholder="http://localhost:8000" />
+      </div>
+      <div class="data-row" id="row-openai-chatgpt2api-key" style="display:none;">
+        <span class="data-label">管理密钥</span>
+        <div class="input-with-icon">
+          <input type="password" id="input-openai-chatgpt2api-key" class="data-input data-input-with-icon"
+            placeholder="请输入 ChatGPT2API Admin Key" />
+          <button id="btn-toggle-openai-chatgpt2api-key" class="input-icon-btn" type="button"
+            data-password-toggle="input-openai-chatgpt2api-key" data-show-label="显示 ChatGPT2API Admin Key"
+            data-hide-label="隐藏 ChatGPT2API Admin Key" aria-label="显示 ChatGPT2API Admin Key"
+            title="显示 ChatGPT2API Admin Key"></button>
+        </div>
+      </div>
+      <div class="data-row" id="row-openai-chatgpt2api-upload-status" style="display:none;">
+        <span class="data-label">上传状态</span>
+        <span id="display-openai-chatgpt2api-upload-status" class="data-value mono truncate">未开始</span>
+      </div>
       <div class="data-row" id="row-kiro-rs-url" style="display:none;">
         <span class="data-label">kiro.rs</span>
         <input type="text" id="input-kiro-rs-url" class="data-input"
@@ -509,6 +529,23 @@
           <option value="cloudflare-temp-email">Cloudflare Temp Email（推荐）</option>
           <option value="cloudmail">Cloud Mail</option>
         </select>
+      </div>
+      <div class="data-row" id="row-duck-email-generation-mode" style="display:none;">
+        <span class="data-label">Duck 方式</span>
+        <select id="select-duck-email-generation-mode" class="data-select">
+          <option value="page">打开页面</option>
+          <option value="token">Token 直连</option>
+        </select>
+      </div>
+      <div class="data-row" id="row-duck-ddg-token" style="display:none;">
+        <span class="data-label">DDG Token</span>
+        <div class="input-with-icon">
+          <input type="password" id="input-duck-ddg-token" class="data-input data-input-with-icon mono"
+            placeholder="可留空，Token 直连时自动获取并回填" />
+          <button id="btn-toggle-duck-ddg-token" class="input-icon-btn" type="button"
+            data-password-toggle="input-duck-ddg-token" data-show-label="显示 DDG Token"
+            data-hide-label="隐藏 DDG Token" aria-label="显示 DDG Token" title="显示 DDG Token"></button>
+        </div>
       </div>
       <div class="data-row data-check-row" id="row-custom-email-pool" style="display:none;">
         <span class="data-label">邮箱池</span>

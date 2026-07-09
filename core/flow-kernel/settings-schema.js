@@ -321,7 +321,7 @@
           codex2apiAdminKey: String(targetState.codex2apiAdminKey ?? '').trim(),
         };
       }
-      if (flowId === 'openai' && targetId === 'webchat') {
+      if (flowId === 'openai' && (targetId === 'webchat' || targetId === 'chatgpt2api')) {
         return {
           ...targetState,
           baseUrl: String(targetState.baseUrl ?? '').trim(),
@@ -467,6 +467,20 @@
         baseUrl: sharedWebchatConfig.baseUrl,
         apiKey: sharedWebchatConfig.apiKey,
       };
+      const chatgpt2ApiCurrent = isPlainObject(currentFlow.targets.chatgpt2api)
+        ? currentFlow.targets.chatgpt2api
+        : {};
+      const chatgpt2ApiSource = {
+        ...chatgpt2ApiCurrent,
+        ...getTargetValue(
+          nested,
+          (state) => state.flows?.openai?.integrationTargets?.chatgpt2api,
+          null,
+          {}
+        ),
+        baseUrl: input?.openaiChatgpt2ApiUrl ?? chatgpt2ApiCurrent.baseUrl,
+        apiKey: input?.openaiChatgpt2ApiAdminKey ?? chatgpt2ApiCurrent.apiKey,
+      };
       return {
         ...currentFlow,
         targets: {
@@ -475,6 +489,7 @@
           sub2api: normalizeFlowTargetState('openai', 'sub2api', sub2apiSource, defaultOpenAiTargets.sub2api || {}),
           codex2api: normalizeFlowTargetState('openai', 'codex2api', codex2apiSource, defaultOpenAiTargets.codex2api || {}),
           webchat: normalizeFlowTargetState('openai', 'webchat', webchatSource, defaultOpenAiTargets.webchat || {}),
+          chatgpt2api: normalizeFlowTargetState('openai', 'chatgpt2api', chatgpt2ApiSource, defaultOpenAiTargets.chatgpt2api || {}),
         },
         signup: {
           signupMethod: String(
@@ -759,6 +774,8 @@
       next.openaiWebchatUrl = openaiState.targets.webchat?.baseUrl || '';
       next.openaiWebchatAdminKey = openaiState.targets.webchat?.apiKey || '';
       next.openaiWebchatUploadEnabled = Boolean(openaiState.webchatUpload?.enabled);
+      next.openaiChatgpt2ApiUrl = openaiState.targets.chatgpt2api?.baseUrl || '';
+      next.openaiChatgpt2ApiAdminKey = openaiState.targets.chatgpt2api?.apiKey || '';
       next.customPassword = normalizedState.services.account.customPassword;
       next.signupMethod = openaiState.signup?.signupMethod || 'email';
       next.phoneVerificationEnabled = Boolean(openaiState.signup?.phoneVerificationEnabled);

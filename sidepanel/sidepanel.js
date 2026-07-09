@@ -198,6 +198,12 @@ const inputOpenAiWebchatUploadEnabled = document.getElementById('input-openai-we
 const displayOpenAiWebchatUploadHint = document.getElementById('display-openai-webchat-upload-hint');
 const rowOpenAiWebchatUploadStatus = document.getElementById('row-openai-webchat-upload-status');
 const displayOpenAiWebchatUploadStatus = document.getElementById('display-openai-webchat-upload-status');
+const rowOpenAiChatgpt2ApiUrl = document.getElementById('row-openai-chatgpt2api-url');
+const inputOpenAiChatgpt2ApiUrl = document.getElementById('input-openai-chatgpt2api-url');
+const rowOpenAiChatgpt2ApiKey = document.getElementById('row-openai-chatgpt2api-key');
+const inputOpenAiChatgpt2ApiKey = document.getElementById('input-openai-chatgpt2api-key');
+const rowOpenAiChatgpt2ApiUploadStatus = document.getElementById('row-openai-chatgpt2api-upload-status');
+const displayOpenAiChatgpt2ApiUploadStatus = document.getElementById('display-openai-chatgpt2api-upload-status');
 const rowKiroWebStatus = document.getElementById('row-kiro-web-status');
 const displayKiroWebStatus = document.getElementById('display-kiro-web-status');
 const rowKiroLoginUrl = document.getElementById('row-kiro-login-url');
@@ -257,6 +263,10 @@ const rowMail2925PoolSettings = document.getElementById('row-mail2925-pool-setti
 const mail2925ModeButtons = Array.from(document.querySelectorAll('[data-mail2925-mode]'));
 const rowEmailGenerator = document.getElementById('row-email-generator');
 const selectEmailGenerator = document.getElementById('select-email-generator');
+const rowDuckEmailGenerationMode = document.getElementById('row-duck-email-generation-mode');
+const selectDuckEmailGenerationMode = document.getElementById('select-duck-email-generation-mode');
+const rowDuckDdgToken = document.getElementById('row-duck-ddg-token');
+const inputDuckDdgToken = document.getElementById('input-duck-ddg-token');
 const rowCustomEmailPool = document.getElementById('row-custom-email-pool');
 const inputCustomEmailPool = document.getElementById('input-custom-email-pool');
 const btnCustomEmailPoolRefresh = document.getElementById('btn-custom-email-pool-refresh');
@@ -1872,6 +1882,7 @@ const TARGET_REPOSITORY_URLS = Object.freeze({
     cpa: 'https://github.com/router-for-me/CLIProxyAPI',
     sub2api: 'https://github.com/Wei-Shaw/sub2api',
     webchat: 'https://github.com/zqbxdev/webchat2api',
+    chatgpt2api: 'https://github.com/basketikun/chatgpt2api',
   }),
   kiro: Object.freeze({
     'kiro-rs': 'https://github.com/QLHazyCoder/kiro.rs',
@@ -1887,6 +1898,7 @@ const PRIVACY_MASKED_INPUT_IDS = Object.freeze([
   'input-sub2api-default-proxy',
   'input-codex2api-url',
   'input-openai-webchat-url',
+  'input-openai-chatgpt2api-url',
   'input-kiro-rs-url',
   'input-grok-webchat2api-url',
   'input-email-prefix',
@@ -2933,6 +2945,57 @@ function isOpenAiWebchatConfigComplete(state = latestState) {
     getSharedWebchatUrlFromState(state)
     && getSharedWebchatAdminKeyFromState(state).trim()
   );
+}
+
+function getOpenAiChatgpt2ApiUrlFromState(state = latestState) {
+  return String(
+    state?.openaiChatgpt2ApiUrl
+    || state?.settingsState?.flows?.openai?.targets?.chatgpt2api?.baseUrl
+    || ''
+  ).trim();
+}
+
+function getOpenAiChatgpt2ApiAdminKeyFromState(state = latestState) {
+  return String(
+    state?.openaiChatgpt2ApiAdminKey
+    || state?.settingsState?.flows?.openai?.targets?.chatgpt2api?.apiKey
+    || ''
+  );
+}
+
+function buildOpenAiChatgpt2ApiConfigPatch(urlValue = '', adminKeyValue = '') {
+  return {
+    openaiChatgpt2ApiUrl: String(urlValue || '').trim(),
+    openaiChatgpt2ApiAdminKey: String(adminKeyValue || ''),
+  };
+}
+
+function syncOpenAiChatgpt2ApiInputsFromState(state = latestState) {
+  if (typeof inputOpenAiChatgpt2ApiUrl !== 'undefined' && inputOpenAiChatgpt2ApiUrl) {
+    inputOpenAiChatgpt2ApiUrl.value = getOpenAiChatgpt2ApiUrlFromState(state);
+  }
+  if (typeof inputOpenAiChatgpt2ApiKey !== 'undefined' && inputOpenAiChatgpt2ApiKey) {
+    inputOpenAiChatgpt2ApiKey.value = getOpenAiChatgpt2ApiAdminKeyFromState(state);
+  }
+}
+
+function renderOpenAiChatgpt2ApiState(state = latestState) {
+  if (!displayOpenAiChatgpt2ApiUploadStatus) {
+    return;
+  }
+  const uploadStatus = String(state?.openaiChatgpt2ApiUploadStatus || '').trim();
+  const uploadMessage = String(state?.openaiChatgpt2ApiUploadMessage || '').trim();
+  const uploadTargetUrl = String(state?.openaiChatgpt2ApiTargetUrl || '').trim();
+  const uploadedAt = Number(state?.openaiChatgpt2ApiUploadedAt) || 0;
+  const statusLabel = getOpenAiWebchatUploadStatusLabel(uploadStatus);
+  displayOpenAiChatgpt2ApiUploadStatus.textContent = `${statusLabel}${uploadMessage ? `：${uploadMessage}` : ''}${uploadedAt ? `，${new Date(uploadedAt).toLocaleString()}` : ''}`;
+  displayOpenAiChatgpt2ApiUploadStatus.title = uploadTargetUrl || '';
+  const tone = uploadStatus === 'uploaded' ? 'ok' : (uploadStatus === 'uploading' ? 'running' : (uploadStatus === 'error' ? 'error' : ''));
+  if (tone) {
+    displayOpenAiChatgpt2ApiUploadStatus.dataset.tone = tone;
+  } else {
+    delete displayOpenAiChatgpt2ApiUploadStatus.dataset.tone;
+  }
 }
 
 function renderOpenAiWebchatState(state = latestState) {
@@ -5008,7 +5071,7 @@ function collectSettingsPayload() {
     ? normalizePanelMode
     : ((value = '') => {
       const normalized = String(value || '').trim().toLowerCase();
-      return ['cpa', 'sub2api', 'codex2api', 'webchat'].includes(normalized) ? normalized : 'cpa';
+      return ['cpa', 'sub2api', 'codex2api', 'webchat', 'chatgpt2api'].includes(normalized) ? normalized : 'cpa';
     });
   const normalizeTargetIdForFlowSafe = typeof normalizeTargetIdForFlow === 'function'
     ? normalizeTargetIdForFlow
@@ -5182,6 +5245,32 @@ function collectSettingsPayload() {
   const currentOpenAiWebchatKeyValue = typeof inputOpenAiWebchatKey !== 'undefined' && inputOpenAiWebchatKey
     ? String(inputOpenAiWebchatKey.value ?? '').trim()
     : '';
+  const readOpenAiChatgpt2ApiUrlFromState = typeof getOpenAiChatgpt2ApiUrlFromState === 'function'
+    ? getOpenAiChatgpt2ApiUrlFromState
+    : ((state = {}) => String(
+      state?.openaiChatgpt2ApiUrl
+      || state?.settingsState?.flows?.openai?.targets?.chatgpt2api?.baseUrl
+      || ''
+    ).trim());
+  const readOpenAiChatgpt2ApiAdminKeyFromState = typeof getOpenAiChatgpt2ApiAdminKeyFromState === 'function'
+    ? getOpenAiChatgpt2ApiAdminKeyFromState
+    : ((state = {}) => String(
+      state?.openaiChatgpt2ApiAdminKey
+      || state?.settingsState?.flows?.openai?.targets?.chatgpt2api?.apiKey
+      || ''
+    ));
+  const createOpenAiChatgpt2ApiConfigPatch = typeof buildOpenAiChatgpt2ApiConfigPatch === 'function'
+    ? buildOpenAiChatgpt2ApiConfigPatch
+    : ((urlValue = '', adminKeyValue = '') => ({
+      openaiChatgpt2ApiUrl: String(urlValue || '').trim(),
+      openaiChatgpt2ApiAdminKey: String(adminKeyValue || ''),
+    }));
+  const currentOpenAiChatgpt2ApiUrlValue = typeof inputOpenAiChatgpt2ApiUrl !== 'undefined' && inputOpenAiChatgpt2ApiUrl
+    ? String(inputOpenAiChatgpt2ApiUrl.value ?? '').trim()
+    : readOpenAiChatgpt2ApiUrlFromState(latestState);
+  const currentOpenAiChatgpt2ApiKeyValue = typeof inputOpenAiChatgpt2ApiKey !== 'undefined' && inputOpenAiChatgpt2ApiKey
+    ? String(inputOpenAiChatgpt2ApiKey.value ?? '')
+    : readOpenAiChatgpt2ApiAdminKeyFromState(latestState);
   const currentGrokWebchat2ApiUrlValue = typeof inputGrokWebchat2ApiUrl !== 'undefined' && inputGrokWebchat2ApiUrl
     ? String(inputGrokWebchat2ApiUrl.value ?? '').trim()
     : '';
@@ -5250,6 +5339,7 @@ function collectSettingsPayload() {
       : String(latestState?.kiroRsKey || '').trim(),
     ...createSharedWebchatConfigPatch(sharedWebchatUrl, sharedWebchatAdminKey),
     openaiWebchatUploadEnabled: openAiWebchatUploadEnabled,
+    ...createOpenAiChatgpt2ApiConfigPatch(currentOpenAiChatgpt2ApiUrlValue, currentOpenAiChatgpt2ApiKeyValue),
     vpsUrl: inputVpsUrl.value.trim(),
     vpsPassword: inputVpsPassword.value,
     localCpaStep9Mode: getSelectedLocalCpaStep9Mode(),
@@ -5331,6 +5421,12 @@ function collectSettingsPayload() {
       : 'http://127.0.0.1:17374',
     currentMail2925AccountId: String(latestState?.currentMail2925AccountId || '').trim(),
     emailGenerator: selectEmailGenerator.value,
+    duckEmailGenerationMode: typeof getSelectedDuckEmailGenerationMode === 'function'
+      ? getSelectedDuckEmailGenerationMode()
+      : 'page',
+    duckDdgToken: typeof inputDuckDdgToken !== 'undefined' && inputDuckDdgToken
+      ? String(inputDuckDdgToken.value || '').trim()
+      : '',
     customMailProviderPool: typeof normalizeCustomEmailPoolEntries === 'function'
       ? normalizeCustomEmailPoolEntries(inputCustomMailProviderPool?.value)
       : [],
@@ -10090,7 +10186,7 @@ function setElementReuseLockedState(element, locked, title = PHONE_SIGNUP_REUSE_
 
 function normalizePanelMode(value = '') {
   const normalized = String(value || '').trim().toLowerCase();
-  if (['cpa', 'sub2api', 'codex2api', 'webchat'].includes(normalized)) {
+  if (['cpa', 'sub2api', 'codex2api', 'webchat', 'chatgpt2api'].includes(normalized)) {
     return normalized;
   }
   return 'cpa';
@@ -12089,8 +12185,14 @@ function applySettingsState(state) {
   if (typeof inputOpenAiWebchatKey !== 'undefined' && inputOpenAiWebchatKey) {
     inputOpenAiWebchatKey.value = String(getSharedWebchatAdminKeyFromState(state) || '');
   }
+  if (typeof syncOpenAiChatgpt2ApiInputsFromState === 'function') {
+    syncOpenAiChatgpt2ApiInputsFromState(state);
+  }
   if (typeof renderOpenAiWebchatState === 'function') {
     renderOpenAiWebchatState(state);
+  }
+  if (typeof renderOpenAiChatgpt2ApiState === 'function') {
+    renderOpenAiChatgpt2ApiState(state);
   }
   if (typeof displayKiroRsTestStatus !== 'undefined' && displayKiroRsTestStatus) {
     displayKiroRsTestStatus.textContent = kiroRsConnectionTestStatusText;
@@ -12266,6 +12368,12 @@ function applySettingsState(state) {
     } else {
       selectEmailGenerator.value = 'duck';
     }
+  }
+  if (typeof selectDuckEmailGenerationMode !== 'undefined' && selectDuckEmailGenerationMode) {
+    selectDuckEmailGenerationMode.value = normalizeDuckEmailGenerationMode(state?.duckEmailGenerationMode);
+  }
+  if (typeof inputDuckDdgToken !== 'undefined' && inputDuckDdgToken) {
+    inputDuckDdgToken.value = String(state?.duckDdgToken || '').trim();
   }
   if (selectIcloudHostPreference) {
     selectIcloudHostPreference.value = String(state?.icloudHostPreference || '').trim().toLowerCase() === 'icloud.com'
@@ -13411,6 +13519,18 @@ function getSelectedEmailGenerator() {
   return 'duck';
 }
 
+function normalizeDuckEmailGenerationMode(value = '') {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['token', 'ddg-token', 'api', 'direct'].includes(normalized) ? 'token' : 'page';
+}
+
+function getSelectedDuckEmailGenerationMode() {
+  const value = typeof selectDuckEmailGenerationMode !== 'undefined' && selectDuckEmailGenerationMode
+    ? selectDuckEmailGenerationMode.value
+    : 'page';
+  return normalizeDuckEmailGenerationMode(value);
+}
+
 function getEmailGeneratorUiCopy() {
   if (getSelectedEmailGenerator() === 'custom') {
     return getCustomMailProviderUiCopy();
@@ -13918,6 +14038,17 @@ function updateMailProviderUI() {
   );
   if (rowEmailGenerator) {
     rowEmailGenerator.style.display = useEmailGenerator ? '' : 'none';
+  }
+  const showDuckGenerationSettings = useEmailGenerator && selectedGenerator === 'duck';
+  const selectedDuckGenerationMode = typeof getSelectedDuckEmailGenerationMode === 'function'
+    ? getSelectedDuckEmailGenerationMode()
+    : 'page';
+  const showDuckDdgToken = showDuckGenerationSettings && selectedDuckGenerationMode === 'token';
+  if (typeof rowDuckEmailGenerationMode !== 'undefined' && rowDuckEmailGenerationMode) {
+    rowDuckEmailGenerationMode.style.display = showDuckGenerationSettings ? '' : 'none';
+  }
+  if (typeof rowDuckDdgToken !== 'undefined' && rowDuckDdgToken) {
+    rowDuckDdgToken.style.display = showDuckDdgToken ? '' : 'none';
   }
   if (typeof rowCustomEmailPool !== 'undefined' && rowCustomEmailPool) {
     rowCustomEmailPool.style.display = useCustomEmailPool ? '' : 'none';
@@ -14524,6 +14655,9 @@ function updatePanelModeUI() {
   if (typeof renderOpenAiWebchatState === 'function') {
     renderOpenAiWebchatState(latestState);
   }
+  if (typeof renderOpenAiChatgpt2ApiState === 'function') {
+    renderOpenAiChatgpt2ApiState(latestState);
+  }
   const displayTargetId = normalizePanelMode(
     activeFlowId === DEFAULT_ACTIVE_FLOW_ID
       ? (capabilityState?.effectiveTargetId || targetId)
@@ -14847,6 +14981,8 @@ async function fetchGeneratedEmail(options = {}) {
         generator: selectEmailGenerator.value,
         mailProvider: selectMailProvider.value,
         mail2925Mode: getSelectedMail2925Mode(),
+        duckEmailGenerationMode: getSelectedDuckEmailGenerationMode(),
+        duckDdgToken: inputDuckDdgToken ? String(inputDuckDdgToken.value || '').trim() : '',
         ...(getSelectedEmailGenerator() === CUSTOM_EMAIL_POOL_GENERATOR
           ? {
               customEmailPool: getActiveCustomEmailPoolEmails(),
@@ -16646,6 +16782,22 @@ selectEmailGenerator.addEventListener('change', () => {
   saveSettings({ silent: true }).catch(() => { });
 });
 
+selectDuckEmailGenerationMode?.addEventListener('change', () => {
+  updateMailProviderUI();
+  markSettingsDirty(true);
+  saveSettings({ silent: true }).catch(() => { });
+});
+
+inputDuckDdgToken?.addEventListener('input', () => {
+  markSettingsDirty(true);
+  scheduleSettingsAutoSave();
+});
+
+inputDuckDdgToken?.addEventListener('change', () => {
+  markSettingsDirty(true);
+  saveSettings({ silent: true }).catch(() => { });
+});
+
 selectIcloudHostPreference?.addEventListener('change', () => {
   updateMailProviderUI();
   markSettingsDirty(true);
@@ -16806,6 +16958,23 @@ selectPlusAccountAccessStrategy?.addEventListener('change', () => {
       syncLatestState({ openaiWebchatUploadEnabled: false });
     }
     renderOpenAiWebchatState(latestState);
+    syncStepDefinitionsFromUiState(latestState);
+    markSettingsDirty(true);
+    scheduleSettingsAutoSave();
+  });
+  input?.addEventListener('blur', () => {
+    saveSettings({ silent: true }).catch(() => { });
+  });
+});
+
+[inputOpenAiChatgpt2ApiUrl, inputOpenAiChatgpt2ApiKey].forEach((input) => {
+  input?.addEventListener('input', () => {
+    syncLatestState(buildOpenAiChatgpt2ApiConfigPatch(
+      inputOpenAiChatgpt2ApiUrl ? inputOpenAiChatgpt2ApiUrl.value : getOpenAiChatgpt2ApiUrlFromState(latestState),
+      inputOpenAiChatgpt2ApiKey ? inputOpenAiChatgpt2ApiKey.value : getOpenAiChatgpt2ApiAdminKeyFromState(latestState)
+    ));
+    syncOpenAiChatgpt2ApiInputsFromState(latestState);
+    renderOpenAiChatgpt2ApiState(latestState);
     syncStepDefinitionsFromUiState(latestState);
     markSettingsDirty(true);
     scheduleSettingsAutoSave();
@@ -18857,6 +19026,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         syncStepDefinitionsFromUiState(latestState);
       }
       if (
+        message.payload.openaiChatgpt2ApiUrl !== undefined
+        || message.payload.openaiChatgpt2ApiAdminKey !== undefined
+        || message.payload.openaiChatgpt2ApiUploadStatus !== undefined
+        || message.payload.openaiChatgpt2ApiUploadedAt !== undefined
+        || message.payload.openaiChatgpt2ApiUploadMessage !== undefined
+        || message.payload.openaiChatgpt2ApiTargetUrl !== undefined
+      ) {
+        syncOpenAiChatgpt2ApiInputsFromState(latestState);
+        renderOpenAiChatgpt2ApiState(latestState);
+        syncStepDefinitionsFromUiState(latestState);
+      }
+      if (
         message.payload.sub2apiGroupName !== undefined
         || message.payload.sub2apiGroupNames !== undefined
       ) {
@@ -19084,6 +19265,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
       if (message.payload.cloudMailDomain !== undefined && inputCloudMailDomain) {
         inputCloudMailDomain.value = message.payload.cloudMailDomain || '';
+      }
+      if (message.payload.duckEmailGenerationMode !== undefined && selectDuckEmailGenerationMode) {
+        selectDuckEmailGenerationMode.value = normalizeDuckEmailGenerationMode(message.payload.duckEmailGenerationMode);
+        updateMailProviderUI();
+      }
+      if (message.payload.duckDdgToken !== undefined && inputDuckDdgToken) {
+        inputDuckDdgToken.value = String(message.payload.duckDdgToken || '').trim();
+        updateMailProviderUI();
       }
       if (message.payload.plusModeEnabled !== undefined && inputPlusModeEnabled) {
         inputPlusModeEnabled.checked = Boolean(message.payload.plusModeEnabled);

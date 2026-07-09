@@ -102,6 +102,8 @@ const SETTINGS_SCHEMA_VIEW_KEYS = Object.freeze([
   'openaiWebchatUrl',
   'openaiWebchatAdminKey',
   'openaiWebchatUploadEnabled',
+  'openaiChatgpt2ApiUrl',
+  'openaiChatgpt2ApiAdminKey',
   'stepExecutionRangeByFlow',
 ]);
 const SETTINGS_SCHEMA_VIEW_KEY_SET = new Set(SETTINGS_SCHEMA_VIEW_KEYS);
@@ -131,6 +133,14 @@ const PERSISTED_SETTING_DEFAULTS = {
   openaiWebchatUploadedAt: 0,
   openaiWebchatUploadMessage: '',
   openaiWebchatTargetUrl: '',
+  openaiChatgpt2ApiUrl: '',
+  openaiChatgpt2ApiAdminKey: '',
+  openaiChatgpt2ApiUploadStatus: '',
+  openaiChatgpt2ApiUploadedAt: 0,
+  openaiChatgpt2ApiUploadMessage: '',
+  openaiChatgpt2ApiTargetUrl: '',
+  duckEmailGenerationMode: 'page',
+  duckDdgToken: '',
   phoneSmsProvider: 'hero-sms',
   madaoBaseUrl: DEFAULT_MADAO_BASE_URL,
   madaoHttpSecret: '',
@@ -176,6 +186,15 @@ function normalizeCloudflareTempEmailDomains(value) { return Array.isArray(value
 function normalizeCloudMailDomains(value) { return Array.isArray(value) ? value : []; }
 function normalizeMailProvider(value = '') { return String(value || '163').trim().toLowerCase() || '163'; }
 function normalizeCustomMailReceiveMode(value = '') { return String(value || '').trim().toLowerCase() === 'helper' ? 'helper' : 'manual'; }
+function normalizeDuckEmailGenerationMode(value = '') {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['token', 'ddg-token', 'api', 'direct'].includes(normalized) ? 'token' : 'page';
+}
+function normalizeDuckDdgToken(value = '') {
+  const trimmed = String(value || '').trim().replace(/^["']|["']$/g, '');
+  const bearerMatch = trimmed.match(/^Bearer\\s+(.+)$/i);
+  return (bearerMatch ? bearerMatch[1] : trimmed).trim();
+}
 function normalizeCustomMailHelperBaseUrl(value = '') {
   const trimmed = String(value || '').trim();
   const candidate = trimmed || 'http://127.0.0.1:17374';
@@ -323,6 +342,8 @@ test('buildPersistentSettingsPayload writes canonical settings schema into persi
     openaiWebchatUrl: ' https://webchat.example.com/admin ',
     openaiWebchatAdminKey: ' webchat-key ',
     openaiWebchatUploadEnabled: true,
+    openaiChatgpt2ApiUrl: ' https://chatgpt2api.example.com/admin ',
+    openaiChatgpt2ApiAdminKey: ' chatgpt2api-key ',
   }, { fillDefaults: true });
 
   assert.equal(payload.activeFlowId, 'kiro');
@@ -333,6 +354,8 @@ test('buildPersistentSettingsPayload writes canonical settings schema into persi
   assert.equal(payload.openaiWebchatUrl, 'https://webchat.example.com/admin');
   assert.equal(payload.openaiWebchatAdminKey, 'webchat-key');
   assert.equal(payload.openaiWebchatUploadEnabled, false);
+  assert.equal(payload.openaiChatgpt2ApiUrl, 'https://chatgpt2api.example.com/admin');
+  assert.equal(payload.openaiChatgpt2ApiAdminKey, 'chatgpt2api-key');
   assert.equal(payload.phoneSmsProvider, 'hero-sms');
   assert.equal(payload.madaoBaseUrl, DEFAULT_MADAO_BASE_URL_FOR_TEST);
   assert.equal(payload.madaoMode, DEFAULT_MADAO_MODE_FOR_TEST);
@@ -346,6 +369,8 @@ test('buildPersistentSettingsPayload writes canonical settings schema into persi
   assert.equal(payload.settingsState.flows.kiro.selectedTargetId, 'kiro-rs');
   assert.equal(payload.settingsState.flows.openai.targets.webchat.baseUrl, 'https://webchat.example.com/admin');
   assert.equal(payload.settingsState.flows.openai.targets.webchat.apiKey, 'webchat-key');
+  assert.equal(payload.settingsState.flows.openai.targets.chatgpt2api.baseUrl, 'https://chatgpt2api.example.com/admin');
+  assert.equal(payload.settingsState.flows.openai.targets.chatgpt2api.apiKey, 'chatgpt2api-key');
   assert.equal(payload.settingsState.flows.openai.webchatUpload.enabled, false);
   assert.equal(
     payload.settingsState.flows.kiro.targets['kiro-rs'].baseUrl,
@@ -746,6 +771,20 @@ function getRemovedKeys() {
   assert.equal(write.settingsState.services.email.customReceiveMode, 'helper');
   assert.equal(write.settingsState.services.email.customHelperBaseUrl, 'http://127.0.0.1:17374');
   assert.equal(Object.prototype.hasOwnProperty.call(write, 'customMailReceiveMode'), false);
+});
+
+test('buildPersistentSettingsPayload keeps Duck token generation settings in flat persisted settings', () => {
+  const api = buildHarness();
+
+  const payload = api.buildPersistentSettingsPayload({
+    duckEmailGenerationMode: 'direct',
+    duckDdgToken: 'Bearer ddg-token-for-test',
+  }, { fillDefaults: true });
+
+  assert.equal(payload.duckEmailGenerationMode, 'token');
+  assert.equal(payload.duckDdgToken, 'ddg-token-for-test');
+  assert.equal(Object.prototype.hasOwnProperty.call(payload.settingsState.services.email, 'duckEmailGenerationMode'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(payload.settingsState.services.email, 'duckDdgToken'), false);
 });
 
 test('buildPersistentSettingsPayload persists normalized MaDao flat settings outside canonical settingsState', () => {

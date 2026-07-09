@@ -36,7 +36,8 @@
       "cpa",
       "sub2api",
       "codex2api",
-      "webchat"
+      "webchat",
+      "chatgpt2api"
     ],
     "supportsLuckmail": true,
     "canSwitchFlow": true,
@@ -104,6 +105,17 @@
       },
       "groups": [
         "openai-target-webchat"
+      ]
+    },
+    "chatgpt2api": {
+      "id": "chatgpt2api",
+      "label": "ChatGPT2API",
+      "defaultState": {
+        "baseUrl": "",
+        "apiKey": ""
+      },
+      "groups": [
+        "openai-target-chatgpt2api"
       ]
     }
   },
@@ -284,6 +296,16 @@
       "cleanupScopes": [],
       "familyMatchers": []
     },
+    "openai-chatgpt2api": {
+      "flowId": "openai",
+      "kind": "remote-publisher",
+      "label": "ChatGPT2API",
+      "readyPolicy": "disabled",
+      "family": "openai-chatgpt2api-family",
+      "driverId": "flows/openai/background/publisher-chatgpt2api",
+      "cleanupScopes": [],
+      "familyMatchers": []
+    },
     "plus-checkout": {
       "flowId": "openai",
       "kind": "flow-page",
@@ -383,6 +405,12 @@
       "commands": [
         "openai-upload-session-to-webchat"
       ]
+    },
+    "flows/openai/background/publisher-chatgpt2api": {
+      "sourceId": "openai-chatgpt2api",
+      "commands": [
+        "openai-upload-session-to-chatgpt2api"
+      ]
     }
   },
   "defaultTargetId": "cpa",
@@ -423,6 +451,15 @@
         "row-openai-webchat-url",
         "row-openai-webchat-key",
         "row-openai-webchat-upload-status"
+      ]
+    },
+    "openai-target-chatgpt2api": {
+      "id": "openai-target-chatgpt2api",
+      "label": "ChatGPT2API",
+      "rowIds": [
+        "row-openai-chatgpt2api-url",
+        "row-openai-chatgpt2api-key",
+        "row-openai-chatgpt2api-upload-status"
       ]
     },
     "openai-webchat-upload": {
@@ -489,6 +526,14 @@
       ]
     },
     "webchat": {
+      "supportsPhoneSignup": false,
+      "supportsPhoneVerificationSettings": false,
+      "requiresPhoneSignupWarning": false,
+      "supportedPlusAccountAccessStrategies": [
+        "oauth"
+      ]
+    },
+    "chatgpt2api": {
       "supportsPhoneSignup": false,
       "supportsPhoneVerificationSettings": false,
       "requiresPhoneSignupWarning": false,

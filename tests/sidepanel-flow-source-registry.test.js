@@ -68,6 +68,12 @@ test('sidepanel html exposes flow selector and kiro source fields', () => {
     'id="input-openai-webchat-key"',
     'id="row-openai-webchat-upload-status"',
     'id="display-openai-webchat-upload-status"',
+    'id="row-openai-chatgpt2api-url"',
+    'id="input-openai-chatgpt2api-url"',
+    'id="row-openai-chatgpt2api-key"',
+    'id="input-openai-chatgpt2api-key"',
+    'id="row-openai-chatgpt2api-upload-status"',
+    'id="display-openai-chatgpt2api-upload-status"',
     '<script src="../flows/grok/index.js"></script>',
     '<script src="../flows/grok/workflow.js"></script>',
   ].forEach((snippet) => {
@@ -170,6 +176,7 @@ test('sidepanel project repository button resolves the configured target reposit
   assert.match(sidepanelSource, /cpa:\s*'https:\/\/github\.com\/router-for-me\/CLIProxyAPI'/);
   assert.match(sidepanelSource, /sub2api:\s*'https:\/\/github\.com\/Wei-Shaw\/sub2api'/);
   assert.match(sidepanelSource, /webchat:\s*'https:\/\/github\.com\/zqbxdev\/webchat2api'/);
+  assert.match(sidepanelSource, /chatgpt2api:\s*'https:\/\/github\.com\/basketikun\/chatgpt2api'/);
   assert.match(sidepanelSource, /'kiro-rs':\s*'https:\/\/github\.com\/QLHazyCoder\/kiro\.rs'/);
   assert.match(sidepanelSource, /webchat2api:\s*'https:\/\/github\.com\/zqbxdev\/webchat2api'/);
   assert.doesNotMatch(sidepanelSource, /github\.com\/hank9999\/kiro\.rs/);
@@ -187,6 +194,7 @@ const TARGET_REPOSITORY_URLS = Object.freeze({
     cpa: 'https://github.com/router-for-me/CLIProxyAPI',
     sub2api: 'https://github.com/Wei-Shaw/sub2api',
     webchat: 'https://github.com/zqbxdev/webchat2api',
+    chatgpt2api: 'https://github.com/basketikun/chatgpt2api',
   }),
   kiro: Object.freeze({
     'kiro-rs': 'https://github.com/QLHazyCoder/kiro.rs',
@@ -203,7 +211,7 @@ function getDefaultTargetIdForFlow(flowId) {
 }
 function normalizeTargetIdForFlow(flowId, targetId, fallback) {
   const targets = {
-    openai: ['cpa', 'sub2api', 'codex2api', 'webchat'],
+    openai: ['cpa', 'sub2api', 'codex2api', 'webchat', 'chatgpt2api'],
     kiro: ['kiro-rs'],
     grok: ['webchat2api'],
   }[flowId] || [];
@@ -218,6 +226,7 @@ return { getTargetRepositoryUrl };
   assert.equal(api.getTargetRepositoryUrl('openai', 'cpa'), 'https://github.com/router-for-me/CLIProxyAPI');
   assert.equal(api.getTargetRepositoryUrl('openai', 'sub2api'), 'https://github.com/Wei-Shaw/sub2api');
   assert.equal(api.getTargetRepositoryUrl('openai', 'webchat'), 'https://github.com/zqbxdev/webchat2api');
+  assert.equal(api.getTargetRepositoryUrl('openai', 'chatgpt2api'), 'https://github.com/basketikun/chatgpt2api');
   assert.equal(api.getTargetRepositoryUrl('grok', 'webchat2api'), 'https://github.com/zqbxdev/webchat2api');
   assert.equal(api.getTargetRepositoryUrl('openai', 'codex2api'), '');
 });
@@ -392,7 +401,7 @@ function getFlowRegistry() {
     normalizeTargetId(flowId, targetId = '', fallback = '') {
       const normalizedFlowId = normalizeFlowId(flowId);
       const normalizedTargetId = String(targetId || '').trim().toLowerCase();
-      if (normalizedFlowId === 'openai' && ['cpa', 'sub2api', 'codex2api', 'webchat'].includes(normalizedTargetId)) {
+      if (normalizedFlowId === 'openai' && ['cpa', 'sub2api', 'codex2api', 'webchat', 'chatgpt2api'].includes(normalizedTargetId)) {
         return normalizedTargetId;
       }
       return String(fallback || '').trim().toLowerCase() || 'cpa';
@@ -404,7 +413,9 @@ return { normalizePanelMode, normalizeTargetIdForFlow };
 `)();
 
   assert.equal(api.normalizePanelMode('webchat'), 'webchat');
+  assert.equal(api.normalizePanelMode('chatgpt2api'), 'chatgpt2api');
   assert.equal(api.normalizeTargetIdForFlow('openai', 'webchat'), 'webchat');
+  assert.equal(api.normalizeTargetIdForFlow('openai', 'chatgpt2api'), 'chatgpt2api');
 });
 
 test('syncLatestState keeps activeFlowId and flowId in sync when only one side changes', () => {
@@ -502,6 +513,59 @@ return {
   assert.equal(api.inputOpenAiWebchatKey.value, 'shared-key');
   assert.equal(api.inputGrokWebchat2ApiUrl.value, 'https://shared.example.com/admin');
   assert.equal(api.inputGrokWebchat2ApiKey.value, 'shared-key');
+});
+
+test('sidepanel keeps ChatGPT2API config independent from shared webchat inputs', () => {
+  const bundle = [
+    extractFunction(sidepanelSource, 'getOpenAiChatgpt2ApiUrlFromState'),
+    extractFunction(sidepanelSource, 'getOpenAiChatgpt2ApiAdminKeyFromState'),
+    extractFunction(sidepanelSource, 'buildOpenAiChatgpt2ApiConfigPatch'),
+    extractFunction(sidepanelSource, 'syncOpenAiChatgpt2ApiInputsFromState'),
+  ].join('\n');
+
+  const api = new Function(`
+let latestState = {};
+const inputOpenAiChatgpt2ApiUrl = { value: '' };
+const inputOpenAiChatgpt2ApiKey = { value: '' };
+${bundle}
+return {
+  inputOpenAiChatgpt2ApiUrl,
+  inputOpenAiChatgpt2ApiKey,
+  getOpenAiChatgpt2ApiUrlFromState,
+  getOpenAiChatgpt2ApiAdminKeyFromState,
+  buildOpenAiChatgpt2ApiConfigPatch,
+  syncOpenAiChatgpt2ApiInputsFromState,
+};
+`)();
+
+  const state = {
+    openaiWebchatUrl: 'https://shared.example.com/admin',
+    openaiWebchatAdminKey: 'shared-key',
+    settingsState: {
+      flows: {
+        openai: {
+          targets: {
+            chatgpt2api: {
+              baseUrl: 'https://nested-chatgpt2api.example.com/admin',
+              apiKey: 'nested-key',
+            },
+          },
+        },
+      },
+    },
+  };
+
+  assert.equal(api.getOpenAiChatgpt2ApiUrlFromState(state), 'https://nested-chatgpt2api.example.com/admin');
+  assert.equal(api.getOpenAiChatgpt2ApiAdminKeyFromState(state), 'nested-key');
+  assert.deepEqual(api.buildOpenAiChatgpt2ApiConfigPatch(' https://next-chatgpt2api.example.com/admin ', 'next-key'), {
+    openaiChatgpt2ApiUrl: 'https://next-chatgpt2api.example.com/admin',
+    openaiChatgpt2ApiAdminKey: 'next-key',
+  });
+
+  api.syncOpenAiChatgpt2ApiInputsFromState(state);
+
+  assert.equal(api.inputOpenAiChatgpt2ApiUrl.value, 'https://nested-chatgpt2api.example.com/admin');
+  assert.equal(api.inputOpenAiChatgpt2ApiKey.value, 'nested-key');
 });
 
 test('updatePanelModeUI reapplies dynamic Plus and phone visibility after flow group visibility', () => {
