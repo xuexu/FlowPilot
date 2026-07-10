@@ -88,6 +88,17 @@
       return 'oauth';
     };
 
+    const normalizePlusPaymentMethod = (value = '') => {
+      const normalized = String(value || '').trim().toLowerCase();
+      if (normalized === 'paypal-hosted') {
+        return 'paypal-hosted';
+      }
+      if (normalized === 'none') {
+        return 'none';
+      }
+      return 'paypal';
+    };
+
     const normalizeCustomMailHelperBaseUrl = (value = '') => {
       const fallback = 'http://127.0.0.1:17374';
       const trimmed = String(value || '').trim();
@@ -512,18 +523,13 @@
           ),
         },
         plus: {
-          plusModeEnabled: Boolean(
-            input?.plusModeEnabled
-            ?? currentFlow.plus?.plusModeEnabled
-            ?? defaultOpenAiPlus.plusModeEnabled
-            ?? false
-          ),
-          plusPaymentMethod: String(
+          plusModeEnabled: false,
+          plusPaymentMethod: normalizePlusPaymentMethod(
             input?.plusPaymentMethod
             ?? currentFlow.plus?.plusPaymentMethod
             ?? defaultOpenAiPlus.plusPaymentMethod
-            ?? 'plus-auto'
-          ).trim() || defaultOpenAiPlus.plusPaymentMethod || 'plus-auto',
+            ?? 'paypal'
+          ),
           plusAccountAccessStrategy: normalizePlusAccountAccessStrategy(
             input?.plusAccountAccessStrategy
             ?? currentFlow.plus?.plusAccountAccessStrategy
@@ -780,8 +786,8 @@
       next.signupMethod = openaiState.signup?.signupMethod || 'email';
       next.phoneVerificationEnabled = Boolean(openaiState.signup?.phoneVerificationEnabled);
       next.phoneSignupReloginAfterBindEmailEnabled = Boolean(openaiState.signup?.phoneSignupReloginAfterBindEmailEnabled);
-      next.plusModeEnabled = Boolean(openaiState.plus?.plusModeEnabled);
-      next.plusPaymentMethod = openaiState.plus?.plusPaymentMethod || 'plus-auto';
+      next.plusModeEnabled = false;
+      next.plusPaymentMethod = normalizePlusPaymentMethod(openaiState.plus?.plusPaymentMethod || 'paypal');
       next.plusAccountAccessStrategy = openaiState.plus?.plusAccountAccessStrategy || 'oauth';
       next.hostedCheckoutVerificationUrl = openaiState.plus?.hostedCheckoutVerificationUrl || '';
       next.hostedCheckoutPhoneNumber = openaiState.plus?.hostedCheckoutPhoneNumber || '';

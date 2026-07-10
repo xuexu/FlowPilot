@@ -23,7 +23,7 @@
     "supportsEmailSignup": true,
     "supportsPhoneSignup": true,
     "supportsPhoneVerificationSettings": true,
-    "supportsPlusMode": true,
+    "supportsPlusMode": false,
     "supportsContributionMode": true,
     "supportsAccountContribution": true,
     "supportsOpenAiOAuthContribution": true,
@@ -127,7 +127,7 @@
     },
     "plus": {
       "plusModeEnabled": false,
-      "plusPaymentMethod": "plus-auto",
+      "plusPaymentMethod": "paypal",
       "plusAccountAccessStrategy": "oauth",
       "hostedCheckoutVerificationUrl": "",
       "hostedCheckoutPhoneNumber": "",

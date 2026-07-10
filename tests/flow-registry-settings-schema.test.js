@@ -171,6 +171,29 @@ test('settings schema normalizes view input into canonical nested namespaces', (
   });
 });
 
+test('settings schema retires legacy GPC and Plus Auto configurations', () => {
+  const { settingsSchema } = loadApis();
+  const schema = settingsSchema.createSettingsSchema();
+
+  for (const legacyPaymentMethod of ['gpc-helper', 'plus-auto']) {
+    const normalized = schema.normalizeSettingsState({
+      activeFlowId: 'openai',
+      plusModeEnabled: true,
+      plusPaymentMethod: legacyPaymentMethod,
+      gpcCardKey: 'GPC-AAAA1111-BBBB2222-CCCC3333',
+      autoCdk: 'QZ-AAAA-BBBB-CCCC',
+    });
+    const view = schema.buildSettingsView(normalized);
+
+    assert.equal(normalized.flows.openai.plus.plusModeEnabled, false);
+    assert.equal(normalized.flows.openai.plus.plusPaymentMethod, 'paypal');
+    assert.equal(view.plusModeEnabled, false);
+    assert.equal(view.plusPaymentMethod, 'paypal');
+    assert.equal(Object.prototype.hasOwnProperty.call(view, 'gpcCardKey'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(view, 'autoCdk'), false);
+  }
+});
+
 test('settings schema shares webchat connection config between OpenAI and Grok targets', () => {
   const { settingsSchema } = loadApis();
   const schema = settingsSchema.createSettingsSchema();
