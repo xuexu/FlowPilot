@@ -31,7 +31,7 @@
 ## 主要功能
 
 - 支持普通注册授权链路，既可以单步执行，也可以整套 `Auto` 执行。
-- 支持 `CPA`、`SUB2API`、`Codex2API` 三种 OpenAI 来源，以及独立的 `Kiro` flow。
+- 支持 `CPA`、`SUB2API`、`Codex2API` 三种 OpenAI 来源，以及独立的 `Kiro` 和 `Grok` flow。
 - 支持邮箱注册、验证码收取、登录验证码处理、OAuth 同意页确认和平台侧账号创建。
 - 支持 `Hotmail`、`2925`、`QQ Mail`、`163 Mail`、`163 VIP Mail`、`126 Mail`、`Inbucket`、`Cloud Mail`、`YYDS Mail`、`iCloud` 等收码方式。
 - 支持 `DuckDuckGo`、`Cloudflare`、`自定义邮箱池`、`自定义邮箱服务号池`、`Gmail / 2925 别名邮箱` 等注册邮箱生成方式。
@@ -51,6 +51,9 @@
 
 - `Kiro`
   独立的 Builder ID 注册、桌面授权和 `kiro.rs` 上传链路，不复用 OpenAI 的 Plus 和平台接入逻辑。
+
+- `Grok`
+  独立的 xAI 注册和 SSO 提取链路，尾节点可选择上传到 `webchat2api`，或导入到 `SUB2API`。导入 `SUB2API` 时，本轮 Grok 注册邮箱会直接作为账号名称。
 
 ## Plus 模式
 

@@ -9,6 +9,18 @@ const backgroundSource = fs.readFileSync('background.js', 'utf8');
 const DEFAULT_MADAO_BASE_URL_FOR_TEST = 'http://127.0.0.1:7822';
 const DEFAULT_MADAO_MODE_FOR_TEST = 'routing_plan';
 
+test('background persistable defaults include empty Grok SUB2API group policy fields', () => {
+  const start = backgroundSource.indexOf('const PERSISTED_SETTING_DEFAULTS = {');
+  const end = backgroundSource.indexOf('const PERSISTED_SETTING_KEYS', start);
+  assert.ok(start >= 0 && end > start, 'missing PERSISTED_SETTING_DEFAULTS block');
+  const defaultsBlock = backgroundSource.slice(start, end);
+
+  assert.match(defaultsBlock, /grokSub2apiGroupName:\s*'',/);
+  assert.match(defaultsBlock, /grokSub2apiGroupNames:\s*\[\],/);
+  assert.match(defaultsBlock, /grokSub2apiAccountPriority:\s*DEFAULT_SUB2API_ACCOUNT_PRIORITY,/);
+  assert.match(defaultsBlock, /grokSub2apiDefaultProxyName:\s*'',/);
+});
+
 function extractFunction(name) {
   const markers = [`async function ${name}(`, `function ${name}(`];
   const start = markers
@@ -82,6 +94,10 @@ const SETTINGS_SCHEMA_VIEW_KEYS = Object.freeze([
   'sub2apiGroupNames',
   'sub2apiAccountPriority',
   'sub2apiDefaultProxyName',
+  'grokSub2apiGroupName',
+  'grokSub2apiGroupNames',
+  'grokSub2apiAccountPriority',
+  'grokSub2apiDefaultProxyName',
   'codex2apiUrl',
   'codex2apiAdminKey',
   'customPassword',
@@ -934,6 +950,45 @@ function getRemovedKeys() {
   assert.equal(Object.prototype.hasOwnProperty.call(write, 'mailProvider'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(write, 'panelMode'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(write, 'ipProxyMode'), false);
+});
+
+test('setPersistentSettings mirrors shared SUB2API credentials and isolated Grok policy', async () => {
+  const api = buildHarness(`
+const persistedWrites = [];
+const chrome = {
+  storage: {
+    local: {
+      async get() { return {}; },
+      async remove() {},
+      async set(payload) { persistedWrites.push(JSON.parse(JSON.stringify(payload))); },
+    },
+  },
+};
+function getPersistedWrites() { return persistedWrites; }
+`);
+
+  await api.setPersistentSettings({
+    activeFlowId: 'grok',
+    targetId: 'sub2api',
+    sub2apiUrl: 'https://sub2api.example.com/admin/accounts',
+    sub2apiEmail: 'owner@example.com',
+    sub2apiPassword: 'shared-secret',
+    grokSub2apiGroupName: 'grok-pool',
+    grokSub2apiGroupNames: ['grok-default', 'grok-pool'],
+    grokSub2apiAccountPriority: 3,
+    grokSub2apiDefaultProxyName: 'xai-proxy',
+  });
+  const settingsState = api.getPersistedWrites().at(-1).settingsState;
+
+  assert.equal(settingsState.flows.grok.selectedTargetId, 'sub2api');
+  assert.equal(settingsState.flows.openai.targets.sub2api.sub2apiUrl, 'https://sub2api.example.com/admin/accounts');
+  assert.equal(settingsState.flows.grok.targets.sub2api.sub2apiUrl, 'https://sub2api.example.com/admin/accounts');
+  assert.equal(settingsState.flows.grok.targets.sub2api.sub2apiEmail, 'owner@example.com');
+  assert.equal(settingsState.flows.grok.targets.sub2api.sub2apiPassword, 'shared-secret');
+  assert.equal(settingsState.flows.grok.targets.sub2api.sub2apiGroupName, 'grok-pool');
+  assert.deepEqual(settingsState.flows.grok.targets.sub2api.sub2apiGroupNames, ['grok-default', 'grok-pool']);
+  assert.equal(settingsState.flows.grok.targets.sub2api.sub2apiAccountPriority, 3);
+  assert.equal(settingsState.flows.grok.targets.sub2api.sub2apiDefaultProxyName, 'xai-proxy');
 });
 
 test('setPersistentSettings replace mode does not retain previous non-schema settings', async () => {

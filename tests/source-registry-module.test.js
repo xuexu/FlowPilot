@@ -198,6 +198,7 @@ test('shared source registry exposes canonical Kiro sources and drivers', () => 
   assert.equal(registry.driverAcceptsCommand('flows/grok/content/register-page', 'grok-submit-profile'), true);
   assert.equal(registry.driverAcceptsCommand('flows/grok/background/register-runner', 'grok-extract-sso-cookie'), true);
   assert.equal(registry.driverAcceptsCommand('flows/grok/background/publisher-webchat2api', 'grok-upload-sso-to-webchat2api'), true);
+  assert.equal(registry.driverAcceptsCommand('flows/grok/background/publisher-sub2api', 'grok-import-sso-to-sub2api'), true);
   assert.equal(registry.driverAcceptsCommand('flows/openai/background/publisher-webchat', 'openai-upload-session-to-webchat'), true);
   assert.equal(registry.driverAcceptsCommand('flows/openai/background/publisher-chatgpt2api', 'openai-upload-session-to-chatgpt2api'), true);
 });

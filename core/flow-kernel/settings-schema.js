@@ -301,6 +301,37 @@
       };
     }
 
+    function resolveSharedSub2ApiCredentials(input = {}, nested = {}, openAiFlow = {}, grokFlow = {}) {
+      const openAiTarget = isPlainObject(openAiFlow?.targets?.sub2api)
+        ? openAiFlow.targets.sub2api
+        : {};
+      const grokTarget = isPlainObject(grokFlow?.targets?.sub2api)
+        ? grokFlow.targets.sub2api
+        : {};
+      const openAiLegacyTarget = getTargetValue(
+        nested,
+        (state) => state.flows?.openai?.integrationTargets?.sub2api,
+        null,
+        {}
+      );
+      const normalizeValue = (value, trim = true) => trim
+        ? String(value ?? '').trim()
+        : String(value ?? '');
+      const pick = (key, trim = true) => {
+        if (Object.prototype.hasOwnProperty.call(input || {}, key)) {
+          return normalizeValue(input[key], trim);
+        }
+        return [openAiTarget, grokTarget, openAiLegacyTarget]
+          .map((source) => normalizeValue(source?.[key], trim))
+          .find(Boolean) || '';
+      };
+      return {
+        sub2apiUrl: pick('sub2apiUrl'),
+        sub2apiEmail: pick('sub2apiEmail'),
+        sub2apiPassword: pick('sub2apiPassword', false),
+      };
+    }
+
     function normalizeFlowTargetState(flowId, targetId, nested = {}, defaults = {}) {
       const targetState = mergePlainObjects(defaults, nested);
       if (flowId === 'openai' && targetId === 'cpa') {
@@ -351,6 +382,20 @@
           ...targetState,
           baseUrl: String(targetState.baseUrl ?? '').trim(),
           apiKey: String(targetState.apiKey ?? ''),
+        };
+      }
+      if (flowId === 'grok' && targetId === 'sub2api') {
+        return {
+          ...targetState,
+          sub2apiUrl: String(targetState.sub2apiUrl ?? '').trim(),
+          sub2apiEmail: String(targetState.sub2apiEmail ?? '').trim(),
+          sub2apiPassword: String(targetState.sub2apiPassword ?? ''),
+          sub2apiGroupName: String(targetState.sub2apiGroupName ?? '').trim(),
+          sub2apiGroupNames: Array.isArray(targetState.sub2apiGroupNames)
+            ? targetState.sub2apiGroupNames.map((entry) => String(entry || '').trim()).filter(Boolean)
+            : [],
+          sub2apiAccountPriority: Math.max(1, Number(targetState.sub2apiAccountPriority) || 1),
+          sub2apiDefaultProxyName: String(targetState.sub2apiDefaultProxyName ?? '').trim(),
         };
       }
       return targetState;
@@ -427,6 +472,7 @@
       const defaultOpenAiPlus = isPlainObject(defaultOpenAiFlow.plus)
         ? defaultOpenAiFlow.plus
         : {};
+      const sharedSub2ApiCredentials = resolveSharedSub2ApiCredentials(input, nested, currentFlow, grokFlow);
       const cpaSource = {
         ...currentFlow.targets.cpa,
         ...getTargetValue(
@@ -447,9 +493,7 @@
           null,
           {}
         ),
-        sub2apiUrl: input?.sub2apiUrl ?? currentFlow.targets.sub2api.sub2apiUrl,
-        sub2apiEmail: input?.sub2apiEmail ?? currentFlow.targets.sub2api.sub2apiEmail,
-        sub2apiPassword: input?.sub2apiPassword ?? currentFlow.targets.sub2api.sub2apiPassword,
+        ...sharedSub2ApiCredentials,
         sub2apiGroupName: input?.sub2apiGroupName ?? currentFlow.targets.sub2api.sub2apiGroupName,
         sub2apiGroupNames: input?.sub2apiGroupNames ?? currentFlow.targets.sub2api.sub2apiGroupNames,
         sub2apiAccountPriority: input?.sub2apiAccountPriority ?? currentFlow.targets.sub2api.sub2apiAccountPriority,
@@ -605,11 +649,24 @@
         baseUrl: sharedWebchatConfig.baseUrl,
         apiKey: sharedWebchatConfig.apiKey,
       };
+      const sharedSub2ApiCredentials = resolveSharedSub2ApiCredentials(input, nested, openAiFlow, currentFlow);
+      const sub2apiCurrent = isPlainObject(currentFlow.targets.sub2api)
+        ? currentFlow.targets.sub2api
+        : {};
+      const sub2apiSource = {
+        ...sub2apiCurrent,
+        ...sharedSub2ApiCredentials,
+        sub2apiGroupName: input?.grokSub2apiGroupName ?? sub2apiCurrent.sub2apiGroupName,
+        sub2apiGroupNames: input?.grokSub2apiGroupNames ?? sub2apiCurrent.sub2apiGroupNames,
+        sub2apiAccountPriority: input?.grokSub2apiAccountPriority ?? sub2apiCurrent.sub2apiAccountPriority,
+        sub2apiDefaultProxyName: input?.grokSub2apiDefaultProxyName ?? sub2apiCurrent.sub2apiDefaultProxyName,
+      };
       return {
         ...currentFlow,
         targets: {
           ...currentFlow.targets,
           webchat2api: normalizeFlowTargetState('grok', 'webchat2api', targetSource, defaultGrokTargets.webchat2api || {}),
+          sub2api: normalizeFlowTargetState('grok', 'sub2api', sub2apiSource, defaultGrokTargets.sub2api || {}),
         },
       };
     }
@@ -802,6 +859,10 @@
       next.kiroRsKey = kiroState.targets['kiro-rs']?.apiKey || '';
       next.grokWebchat2ApiUrl = grokState.targets.webchat2api?.baseUrl || '';
       next.grokWebchat2ApiAdminKey = grokState.targets.webchat2api?.apiKey || '';
+      next.grokSub2apiGroupName = grokState.targets.sub2api?.sub2apiGroupName || '';
+      next.grokSub2apiGroupNames = cloneValue(grokState.targets.sub2api?.sub2apiGroupNames || []);
+      next.grokSub2apiAccountPriority = grokState.targets.sub2api?.sub2apiAccountPriority || 1;
+      next.grokSub2apiDefaultProxyName = grokState.targets.sub2api?.sub2apiDefaultProxyName || '';
       next.stepExecutionRangeByFlow = buildStepExecutionRangeByFlow(normalizedState);
       next.settingsSchemaVersion = normalizedState.schemaVersion;
       next.settingsState = cloneValue(normalizedState);

@@ -224,6 +224,29 @@
         <span class="data-label">默认代理</span>
         <input type="text" id="input-sub2api-default-proxy" class="data-input" placeholder="留空则不使用代理；或填写代理名称 / ID" />
       </div>
+      <div class="data-row" id="row-grok-sub2api-group" style="display:none;">
+        <span class="data-label">分组</span>
+        <div class="data-inline">
+          <input type="hidden" id="input-grok-sub2api-group" value="" />
+          <div id="grok-sub2api-group-picker" class="editable-list-picker">
+            <button id="btn-grok-sub2api-group-menu" class="data-select editable-list-trigger" type="button"
+              aria-haspopup="listbox" aria-expanded="false">
+              <span id="grok-sub2api-group-current" class="truncate">请先添加分组</span>
+              <span class="editable-list-caret" aria-hidden="true"></span>
+            </button>
+            <div id="grok-sub2api-group-menu" class="editable-list-menu" role="listbox" hidden></div>
+          </div>
+          <button id="btn-add-grok-sub2api-group" class="btn btn-outline btn-sm data-inline-btn" type="button">添加</button>
+        </div>
+      </div>
+      <div class="data-row" id="row-grok-sub2api-account-priority" style="display:none;">
+        <span class="data-label">优先级</span>
+        <input type="number" id="input-grok-sub2api-account-priority" class="data-input mono" value="1" min="1" step="1" />
+      </div>
+      <div class="data-row" id="row-grok-sub2api-default-proxy" style="display:none;">
+        <span class="data-label">默认代理</span>
+        <input type="text" id="input-grok-sub2api-default-proxy" class="data-input" placeholder="留空则不使用代理；或填写代理名称 / ID" />
+      </div>
       <div class="data-row" id="row-codex2api-url" style="display:none;">
         <span class="data-label">Codex2API</span>
         <input type="text" id="input-codex2api-url" class="data-input"
@@ -354,10 +377,6 @@
         <span class="data-label">SSO 状态</span>
         <span id="display-grok-sso-status" class="data-value mono">未提取</span>
       </div>
-      <div class="data-row" id="row-grok-webchat2api-upload-status" style="display:none;">
-        <span class="data-label">上传状态</span>
-        <span id="display-grok-webchat2api-upload-status" class="data-value mono">未开始</span>
-      </div>
       <div class="data-row" id="row-grok-sso-settings" style="display:none;">
         <span class="data-label">SSO Cookie</span>
         <div class="data-inline">
@@ -365,6 +384,10 @@
           <button id="btn-copy-grok-sso" class="btn btn-ghost btn-xs data-inline-btn" type="button">复制</button>
           <button id="btn-clear-grok-sso" class="btn btn-ghost btn-xs data-inline-btn" type="button">清空</button>
         </div>
+      </div>
+      <div class="data-row" id="row-grok-upload-status" style="display:none;">
+        <span class="data-label">发布状态</span>
+        <span id="display-grok-upload-status" class="data-value mono">未开始</span>
       </div>
       <div class="data-row module-divider-start" id="row-custom-password">
         <span class="data-label">账户密码</span>

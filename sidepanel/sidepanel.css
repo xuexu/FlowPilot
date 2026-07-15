@@ -1318,9 +1318,12 @@ header {
 #row-codex2api-admin-key .data-label,
 #row-grok-webchat2api-url .data-label,
 #row-grok-webchat2api-key .data-label,
+#row-grok-sub2api-group .data-label,
+#row-grok-sub2api-account-priority .data-label,
+#row-grok-sub2api-default-proxy .data-label,
 #row-grok-register-status .data-label,
 #row-grok-sso-status .data-label,
-#row-grok-webchat2api-upload-status .data-label,
+#row-grok-upload-status .data-label,
 #row-grok-sso-settings .data-label {
   font-size: 10px;
   letter-spacing: 0.02em;

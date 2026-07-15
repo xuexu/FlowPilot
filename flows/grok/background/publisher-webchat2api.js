@@ -221,6 +221,7 @@
 
     async function persistFailure(currentState = {}, message = '', targetUrl = '') {
       const uploadPatch = {
+        targetId: 'webchat2api',
         status: 'error',
         uploadedAt: 0,
         message,
@@ -260,6 +261,7 @@
             lastError: '',
           },
           upload: {
+            targetId: 'webchat2api',
             status: 'uploading',
             uploadedAt: 0,
             message: '',
@@ -280,6 +282,7 @@
             lastError: '',
           },
           upload: {
+            targetId: 'webchat2api',
             status: 'uploaded',
             uploadedAt,
             message: uploadResult.message || '上传成功',

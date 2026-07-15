@@ -7,6 +7,8 @@
       normalizeSub2ApiUrl = (value) => value,
       DEFAULT_SUB2API_GROUP_NAME = 'codex',
       fetchImpl = (...args) => fetch(...args),
+      setTimeoutImpl = (...args) => setTimeout(...args),
+      clearTimeoutImpl = (...args) => clearTimeout(...args),
     } = deps;
 
     const DEFAULT_REDIRECT_URI = 'http://localhost:1455/auth/callback';
@@ -14,6 +16,8 @@
     const DEFAULT_CONCURRENCY = 10;
     const DEFAULT_PRIORITY = 1;
     const DEFAULT_RATE_MULTIPLIER = 1;
+    const GROK_SSO_IMPORT_PATH = '/api/v1/admin/grok/sso-to-oauth';
+    const GROK_SSO_IMPORT_TIMEOUT_MS = 180000;
 
     function normalizeString(value = '') {
       return String(value || '').trim();
@@ -65,7 +69,7 @@
     async function requestJson(origin, path, options = {}) {
       const controller = new AbortController();
       const timeoutMs = Math.max(1000, Math.floor(Number(options.timeoutMs) || 30000));
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const timer = setTimeoutImpl(() => controller.abort(), timeoutMs);
 
       try {
         const token = normalizeString(options.token);
@@ -106,7 +110,7 @@
         }
         throw error;
       } finally {
-        clearTimeout(timer);
+        clearTimeoutImpl(timer);
       }
     }
 
@@ -140,7 +144,7 @@
       };
     }
 
-    function normalizeSub2ApiGroupNames(value) {
+    function normalizeSub2ApiGroupNames(value, options = {}) {
       const source = Array.isArray(value)
         ? value
         : String(value || '').split(/[\r\n,，;；]+/);
@@ -153,12 +157,17 @@
         seen.add(key);
         names.push(name);
       }
-      return names.length ? names : [DEFAULT_SUB2API_GROUP_NAME];
+      return names.length || options.fallbackToDefault === false
+        ? names
+        : [DEFAULT_SUB2API_GROUP_NAME];
     }
 
     async function getGroupsByNames(origin, token, groupNames, options = {}) {
       const targetNames = normalizeSub2ApiGroupNames(groupNames);
-      const groups = await requestJson(origin, '/api/v1/admin/groups/all', {
+      const requestedPlatform = normalizeString(options.platform).toLowerCase();
+      const targetPlatform = requestedPlatform || 'openai';
+      const query = requestedPlatform ? `?platform=${encodeURIComponent(requestedPlatform)}` : '';
+      const groups = await requestJson(origin, `/api/v1/admin/groups/all${query}`, {
         method: 'GET',
         token,
         timeoutMs: options.timeoutMs,
@@ -171,7 +180,7 @@
         const group = (Array.isArray(groups) ? groups : []).find((item) => {
           const itemName = normalizeString(item?.name).toLowerCase();
           if (!itemName || itemName !== normalized) return false;
-          return !item.platform || item.platform === 'openai';
+          return !item.platform || normalizeString(item.platform).toLowerCase() === targetPlatform;
         });
         if (group) {
           matched.push(group);
@@ -181,10 +190,125 @@
       }
 
       if (missing.length) {
-        throw new Error(`SUB2API 中未找到以下 openai 分组：${missing.join('、')}。`);
+        throw new Error(`SUB2API 中未找到以下 ${targetPlatform} 分组：${missing.join('、')}。`);
       }
 
       return matched;
+    }
+
+    function resolveGrokRuntimeState(state = {}) {
+      const canonical = state?.runtimeState?.flowState?.grok;
+      if (canonical && typeof canonical === 'object' && !Array.isArray(canonical)) {
+        return canonical;
+      }
+      const legacyCanonical = state?.flowState?.grok;
+      return legacyCanonical && typeof legacyCanonical === 'object' && !Array.isArray(legacyCanonical)
+        ? legacyCanonical
+        : {};
+    }
+
+    function resolveGrokRegistrationEmail(state = {}) {
+      const runtimeState = resolveGrokRuntimeState(state);
+      return normalizeString(runtimeState?.register?.email)
+        || normalizeString(state.grokEmail)
+        || normalizeString(state.email);
+    }
+
+    function resolveGrokSsoCookie(state = {}) {
+      const runtimeState = resolveGrokRuntimeState(state);
+      return normalizeString(runtimeState?.sso?.currentCookie)
+        || normalizeString(state.grokSsoCookie);
+    }
+
+    function normalizeGrokSsoImportResult(result = {}) {
+      return {
+        created: Array.isArray(result?.created) ? result.created : [],
+        failed: Array.isArray(result?.failed) ? result.failed : [],
+      };
+    }
+
+    function buildGrokSsoImportFailureMessage(result = {}) {
+      const normalized = normalizeGrokSsoImportResult(result);
+      const details = normalized.failed.map((item, index) => {
+        const itemIndex = Math.max(1, Number(item?.index) || index + 1);
+        const name = normalizeString(item?.name || item?.email);
+        const message = normalizeString(item?.error || item?.message || item?.reason) || '未知服务端错误';
+        return `#${itemIndex}${name ? `（${name}）` : ''}：${message}`;
+      });
+      if (details.length) {
+        return `SUB2API Grok SSO 导入失败：${details.join('；')}`;
+      }
+      return 'SUB2API Grok SSO 导入失败：服务端未创建任何账号。';
+    }
+
+    async function importGrokSso(state = {}, options = {}) {
+      const logLabel = normalizeString(options.logLabel) || 'Grok SUB2API 导入';
+      const accountName = resolveGrokRegistrationEmail(state);
+      const ssoCookie = resolveGrokSsoCookie(state);
+      if (!accountName) {
+        throw new Error('缺少本轮 Grok 注册邮箱，无法将账号导入 SUB2API。');
+      }
+      if (!ssoCookie) {
+        throw new Error('缺少 Grok SSO Cookie，请先完成步骤 5。');
+      }
+      const configuredGroupNames = normalizeSub2ApiGroupNames(
+        Array.isArray(state.sub2apiGroupNames) && state.sub2apiGroupNames.length
+          ? state.sub2apiGroupNames
+          : state.sub2apiGroupName,
+        { fallbackToDefault: false }
+      );
+      if (!configuredGroupNames.length) {
+        throw new Error('请先添加 Grok SUB2API 分组。');
+      }
+
+      await logWithOptions(`${logLabel}：正在登录 SUB2API 并准备导入 Grok 账号...`, 'info', options);
+      const { origin, token } = await loginSub2Api(state, options);
+      const groups = await getGroupsByNames(origin, token, configuredGroupNames, {
+        ...options,
+        platform: 'grok',
+      });
+      const groupIds = groups
+        .map((group) => Number(group?.id))
+        .filter((id) => Number.isSafeInteger(id) && id > 0);
+      if (!groupIds.length) {
+        throw new Error('SUB2API 返回的 Grok 目标分组 ID 无效。');
+      }
+
+      const proxyPreference = resolveSub2ApiProxyPreference(state);
+      const proxy = proxyPreference
+        ? await resolveSub2ApiProxy(origin, token, proxyPreference, options)
+        : null;
+      const proxyId = normalizeProxyId(proxy?.id);
+      const accountPriority = resolveSub2ApiAccountPriority(state);
+      const importPayload = {
+        sso_tokens: [ssoCookie],
+        name: accountName,
+        ...(proxyId ? { proxy_id: proxyId } : {}),
+        group_ids: groupIds,
+        concurrency: DEFAULT_CONCURRENCY,
+        priority: accountPriority,
+        rate_multiplier: DEFAULT_RATE_MULTIPLIER,
+        auto_pause_on_expired: true,
+      };
+
+      await logWithOptions(`${logLabel}：正在导入 Grok SSO 到 SUB2API...`, 'info', options);
+      const result = normalizeGrokSsoImportResult(await requestJson(origin, GROK_SSO_IMPORT_PATH, {
+        method: 'POST',
+        token,
+        timeoutMs: GROK_SSO_IMPORT_TIMEOUT_MS,
+        body: importPayload,
+      }));
+      if (!result.created.length || result.failed.length) {
+        throw new Error(buildGrokSsoImportFailureMessage(result));
+      }
+
+      const verifiedStatus = `SUB2API 已导入 ${result.created.length} 个 Grok OAuth 账号。`;
+      await logWithOptions(verifiedStatus, 'ok', options);
+      return {
+        ...result,
+        targetUrl: `${origin}${GROK_SSO_IMPORT_PATH}`,
+        verifiedStatus,
+      };
     }
 
     function normalizeSub2ApiProxyPreference(value) {
@@ -807,6 +931,7 @@
       extractStateFromAuthUrl,
       generateOpenAiAuthUrl,
       getGroupsByNames,
+      importGrokSso,
       importCurrentChatGptSession,
       loginSub2Api,
       normalizeProxyId,
@@ -816,6 +941,8 @@
       requestJson,
       resolveSub2ApiAccountPriority,
       resolveSub2ApiProxy,
+      resolveGrokRegistrationEmail,
+      resolveGrokSsoCookie,
       submitOpenAiCallback,
     };
   }

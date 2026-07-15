@@ -153,11 +153,29 @@ test('flow capability registry exposes Grok as an independent SSO flow without O
   assert.equal(capabilityState.canShowLuckmail, false);
   assert.equal(capabilityState.effectiveSignupMethod, 'email');
   assert.equal(capabilityState.effectiveTargetId, 'webchat2api');
-  assert.deepEqual(capabilityState.supportedTargetIds, ['webchat2api']);
+  assert.deepEqual(capabilityState.supportedTargetIds, ['webchat2api', 'sub2api']);
   assert.deepEqual(capabilityState.flowCapabilities.contributionAdapterIds, []);
   assert.deepEqual(
     capabilityState.visibleGroupIds,
     ['grok-runtime-status', 'shared-auto-run', 'grok-target-webchat2api', 'service-account', 'service-email', 'service-proxy']
+  );
+});
+
+test('flow capability registry switches Grok settings groups for SUB2API target', () => {
+  const api = loadApi();
+  const registry = api.createFlowCapabilityRegistry();
+
+  const capabilityState = registry.resolveSidepanelCapabilities({
+    state: {
+      activeFlowId: 'grok',
+      targetId: 'sub2api',
+    },
+  });
+
+  assert.equal(capabilityState.effectiveTargetId, 'sub2api');
+  assert.deepEqual(
+    capabilityState.visibleGroupIds,
+    ['grok-runtime-status', 'shared-auto-run', 'grok-target-sub2api', 'service-account', 'service-email', 'service-proxy']
   );
 });
 

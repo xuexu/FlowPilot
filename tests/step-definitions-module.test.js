@@ -33,6 +33,8 @@ test('step definitions module exposes ordered normal and Plus step metadata', ()
   const legacyPaymentSteps = api.getSteps({ plusModeEnabled: true, plusPaymentMethod: 'gopay' });
   const kiroSteps = api.getSteps({ activeFlowId: 'kiro' });
   const grokSteps = api.getSteps({ activeFlowId: 'grok' });
+  const grokSub2ApiSteps = api.getSteps({ activeFlowId: 'grok', targetId: 'sub2api' });
+  const grokAllSteps = api.getAllSteps({ activeFlowId: 'grok' });
 
   assert.equal(Array.isArray(steps), true);
   assert.equal(steps.length, 11);
@@ -253,6 +255,42 @@ test('step definitions module exposes ordered normal and Plus step metadata', ()
       ['grok-submit-profile'],
       ['grok-extract-sso-cookie'],
       ['grok-upload-sso-to-webchat2api'],
+      [],
+    ]
+  );
+  assert.deepStrictEqual(
+    grokSub2ApiSteps.map((step) => step.key),
+    [
+      'grok-open-signup-page',
+      'grok-submit-email',
+      'grok-submit-verification-code',
+      'grok-submit-profile',
+      'grok-extract-sso-cookie',
+      'grok-import-sso-to-sub2api',
+    ]
+  );
+  assert.equal(grokSub2ApiSteps[5].driverId, 'flows/grok/background/publisher-sub2api');
+  assert.equal(grokSub2ApiSteps[5].sourceId, 'grok-sub2api');
+  assert.deepStrictEqual(
+    grokAllSteps.map((step) => step.key),
+    [
+      'grok-open-signup-page',
+      'grok-submit-email',
+      'grok-submit-verification-code',
+      'grok-submit-profile',
+      'grok-extract-sso-cookie',
+      'grok-upload-sso-to-webchat2api',
+      'grok-import-sso-to-sub2api',
+    ]
+  );
+  assert.deepStrictEqual(
+    api.getNodes({ activeFlowId: 'grok', targetId: 'sub2api' }).map((node) => node.next),
+    [
+      ['grok-submit-email'],
+      ['grok-submit-verification-code'],
+      ['grok-submit-profile'],
+      ['grok-extract-sso-cookie'],
+      ['grok-import-sso-to-sub2api'],
       [],
     ]
   );

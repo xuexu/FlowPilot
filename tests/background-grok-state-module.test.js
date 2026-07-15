@@ -38,6 +38,7 @@ test('grok state view projects canonical runtime state into legacy flat read fie
             extractedAt: 3000,
           },
           upload: {
+            targetId: 'webchat2api',
             status: 'uploaded',
             uploadedAt: 4000,
             message: 'ok',
@@ -69,6 +70,7 @@ test('grok state view projects canonical runtime state into legacy flat read fie
   assert.equal(view.runtimeState.flowState.grok.register.email, 'user@example.com');
   assert.equal(view.flowState.grok.sso.currentCookie, 'cookie-a');
   assert.equal(view.flowState.grok.upload.status, 'uploaded');
+  assert.equal(view.flowState.grok.upload.targetId, 'webchat2api');
   assert.equal(view.flows.grok.sso.cookies.length, 2);
 });
 
@@ -124,6 +126,45 @@ test('grok state keeps canonical runtime values when flat compatibility fields a
   assert.equal(runtimeState.sso.extractedAt, 1234);
 });
 
+test('grok state keeps canonical runtime authoritative over stale non-empty flat fields', () => {
+  const api = loadGrokStateApi();
+  const runtimeState = api.ensureRuntimeState({
+    grokEmail: 'stale-flat@example.com',
+    grokSsoCookie: 'stale-flat-cookie',
+    grokWebchat2ApiUploadStatus: 'error',
+    grokWebchat2ApiUploadedAt: 999,
+    grokWebchat2ApiUploadMessage: 'stale flat failure',
+    grokWebchat2ApiTargetUrl: 'https://stale.example.com/api/remote-account/inject',
+    runtimeState: {
+      flowState: {
+        grok: {
+          register: {
+            email: 'canonical@example.com',
+          },
+          sso: {
+            currentCookie: 'canonical-cookie',
+          },
+          upload: {
+            targetId: 'sub2api',
+            status: 'uploaded',
+            uploadedAt: 123,
+            message: 'canonical import complete',
+            targetUrl: 'https://sub.example.com/api/v1/admin/grok/sso-to-oauth',
+          },
+        },
+      },
+    },
+  });
+
+  assert.equal(runtimeState.register.email, 'canonical@example.com');
+  assert.equal(runtimeState.sso.currentCookie, 'canonical-cookie');
+  assert.equal(runtimeState.upload.targetId, 'sub2api');
+  assert.equal(runtimeState.upload.status, 'uploaded');
+  assert.equal(runtimeState.upload.uploadedAt, 123);
+  assert.equal(runtimeState.upload.message, 'canonical import complete');
+  assert.equal(runtimeState.upload.targetUrl, 'https://sub.example.com/api/v1/admin/grok/sso-to-oauth');
+});
+
 test('grok fresh keep-state reset clears registration, SSO, and upload runtime', () => {
   const api = loadGrokStateApi();
   const patch = api.buildFreshKeepState({
@@ -145,6 +186,7 @@ test('grok fresh keep-state reset clears registration, SSO, and upload runtime',
             extractedAt: 2000,
           },
           upload: {
+            targetId: 'sub2api',
             status: 'uploaded',
             uploadedAt: 3000,
             message: 'ok',
@@ -170,6 +212,7 @@ test('grok fresh keep-state reset clears registration, SSO, and upload runtime',
   assert.equal(patch.runtimeState.flowState.grok.register.email, '');
   assert.equal(patch.runtimeState.flowState.grok.sso.currentCookie, '');
   assert.equal(patch.runtimeState.flowState.grok.upload.status, '');
+  assert.equal(patch.runtimeState.flowState.grok.upload.targetId, '');
 });
 
 test('grok downstream reset clears only the state owned by the restarted tail', () => {
@@ -194,6 +237,13 @@ test('grok downstream reset clears only the state owned by the restarted tail', 
             cookies: ['cookie-a'],
             extractedAt: 2000,
           },
+          upload: {
+            targetId: 'sub2api',
+            status: 'uploaded',
+            uploadedAt: 3000,
+            message: 'old import',
+            targetUrl: 'https://sub.example.com/api/v1/admin/grok/sso-to-oauth',
+          },
         },
       },
     },
@@ -204,6 +254,13 @@ test('grok downstream reset clears only the state owned by the restarted tail', 
   assert.equal(profilePatch.grokRegisterStatus, 'completed');
   assert.equal(profilePatch.grokSsoCookie, '');
   assert.deepEqual(profilePatch.grokSsoCookies, []);
+  assert.equal(profilePatch.runtimeState.flowState.grok.upload.targetId, '');
+  assert.equal(profilePatch.runtimeState.flowState.grok.upload.status, '');
+
+  const extractionPatch = api.buildDownstreamResetPatch('grok-extract-sso-cookie', currentState);
+  assert.equal(extractionPatch.runtimeState.flowState.grok.upload.targetId, '');
+  assert.equal(extractionPatch.runtimeState.flowState.grok.upload.status, '');
+  assert.equal(extractionPatch.runtimeState.flowState.grok.upload.targetUrl, '');
 
   const emailPatch = api.buildDownstreamResetPatch('grok-submit-email', currentState);
   assert.equal(emailPatch.grokEmail, '');

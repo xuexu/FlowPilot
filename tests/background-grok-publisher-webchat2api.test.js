@@ -202,6 +202,7 @@ test('grok webchat2api executor reads latest state and writes upload runtime wit
   assert.equal(completed.length, 1);
   assert.equal(completed[0].nodeId, 'grok-upload-sso-to-webchat2api');
   assert.equal(getGrokRuntime(completed[0].payload).upload.status, 'uploaded');
+  assert.equal(getGrokRuntime(completed[0].payload).upload.targetId, 'webchat2api');
   assert.equal(getGrokRuntime(completed[0].payload).upload.message, 'uploaded');
   assert.equal(getGrokRuntime(completed[0].payload).upload.targetUrl, 'https://remote.example.com/api/remote-account/inject');
   assert.equal(typeof getGrokRuntime(completed[0].payload).upload.uploadedAt, 'number');
@@ -267,6 +268,7 @@ test('grok webchat2api executor persists failure state without completing or lea
 
   assert.equal(completed.length, 0);
   assert.equal(getGrokRuntime(liveState).upload.status, 'error');
+  assert.equal(getGrokRuntime(liveState).upload.targetId, 'webchat2api');
   assert.equal(getGrokRuntime(liveState).upload.uploadedAt, 0);
   assert.equal(getGrokRuntime(liveState).upload.message, 'webchat2api SSO 上传失败：invalid admin key');
   assert.equal(getGrokRuntime(liveState).upload.targetUrl, 'https://remote.example.com/api/remote-account/inject');

@@ -57,11 +57,17 @@ test('sidepanel html exposes flow selector and kiro source fields', () => {
     'id="row-kiro-upload-status"',
     'id="row-grok-register-status"',
     'id="row-grok-sso-status"',
-    'id="row-grok-webchat2api-upload-status"',
-    'id="display-grok-webchat2api-upload-status"',
+    'id="row-grok-upload-status"',
+    'id="display-grok-upload-status"',
     'id="row-grok-sso-settings"',
     'id="btn-copy-grok-sso"',
     'id="btn-clear-grok-sso"',
+    'id="row-grok-sub2api-group"',
+    'id="input-grok-sub2api-group"',
+    'id="row-grok-sub2api-account-priority"',
+    'id="input-grok-sub2api-account-priority"',
+    'id="row-grok-sub2api-default-proxy"',
+    'id="input-grok-sub2api-default-proxy"',
     'id="row-openai-webchat-url"',
     'id="input-openai-webchat-url"',
     'id="row-openai-webchat-key"',
@@ -83,6 +89,7 @@ test('sidepanel html exposes flow selector and kiro source fields', () => {
   assert.doesNotMatch(visibleHtml, /id="input-openai-webchat-upload-enabled"/);
   assert.doesNotMatch(visibleHtml, /id="display-openai-webchat-upload-hint"/);
   assert.doesNotMatch(sidepanelHtml, /id="btn-export-grok-sso"/);
+  assert.doesNotMatch(sidepanelHtml, /id="row-grok-webchat2api-upload-status"/);
   assert.match(
     sidepanelHtml,
     /id="btn-open-target-repository"[^>]*class="btn btn-outline btn-sm data-inline-btn"[^>]*>GitHub<\/button>/
@@ -112,12 +119,12 @@ test('sidepanel Grok SSO clear action goes through background message instead of
   assert.doesNotMatch(block, /storage\.local\.set/);
 });
 
-test('sidepanel renders Grok SSO status from canonical runtime state', () => {
+test('sidepanel renders target-aware Grok publish status from canonical runtime state', () => {
   const bundle = [
     extractFunction(sidepanelSource, 'getGrokRuntimeState'),
     extractFunction(sidepanelSource, 'normalizeGrokSsoCookies'),
     extractFunction(sidepanelSource, 'getGrokRegisterStatusLabel'),
-    extractFunction(sidepanelSource, 'getGrokWebchat2ApiUploadStatusLabel'),
+    extractFunction(sidepanelSource, 'getGrokUploadStatusLabel'),
     extractFunction(sidepanelSource, 'renderGrokRuntimeState'),
   ].join('\n');
 
@@ -126,7 +133,7 @@ let latestState = {};
 const displayGrokRegisterStatus = { textContent: '' };
 const displayGrokSsoStatus = { textContent: '' };
 const displayGrokSsoCookie = { textContent: '', title: '' };
-const displayGrokWebchat2ApiUploadStatus = { textContent: '', title: '' };
+const displayGrokUploadStatus = { textContent: '', title: '' };
 const buttons = [];
 const btnCopyGrokSso = { disabled: false };
 const btnClearGrokSso = { disabled: false };
@@ -135,7 +142,7 @@ return {
   displayGrokRegisterStatus,
   displayGrokSsoStatus,
   displayGrokSsoCookie,
-  displayGrokWebchat2ApiUploadStatus,
+  displayGrokUploadStatus,
   btnCopyGrokSso,
   btnClearGrokSso,
   renderGrokRuntimeState,
@@ -153,6 +160,7 @@ return {
             extractedAt: 0,
           },
           upload: {
+            targetId: 'webchat2api',
             status: 'uploaded',
             uploadedAt: 0,
             message: '上传成功',
@@ -166,10 +174,27 @@ return {
   assert.equal(api.displayGrokRegisterStatus.textContent, '已完成');
   assert.match(api.displayGrokSsoStatus.textContent, /^已提取 2 条/);
   assert.equal(api.displayGrokSsoCookie.textContent, '12345678...abcdef');
-  assert.equal(api.displayGrokWebchat2ApiUploadStatus.textContent, '已上传：上传成功');
-  assert.equal(api.displayGrokWebchat2ApiUploadStatus.title, 'https://remote.example.com/api/remote-account/inject');
+  assert.equal(api.displayGrokUploadStatus.textContent, '已上传：上传成功');
+  assert.equal(api.displayGrokUploadStatus.title, 'https://remote.example.com/api/remote-account/inject');
   assert.equal(api.btnCopyGrokSso.disabled, false);
   assert.equal(api.btnClearGrokSso.disabled, false);
+
+  api.renderGrokRuntimeState({
+    runtimeState: {
+      flowState: {
+        grok: {
+          upload: {
+            targetId: 'sub2api',
+            status: 'uploading',
+            message: '',
+            targetUrl: 'https://sub.example.com/api/v1/admin/grok/sso-to-oauth',
+          },
+        },
+      },
+    },
+  });
+  assert.equal(api.displayGrokUploadStatus.textContent, '正在导入');
+  assert.equal(api.displayGrokUploadStatus.title, 'https://sub.example.com/api/v1/admin/grok/sso-to-oauth');
 });
 
 test('sidepanel project repository button resolves the configured target repositories', () => {
@@ -179,6 +204,7 @@ test('sidepanel project repository button resolves the configured target reposit
   assert.match(sidepanelSource, /chatgpt2api:\s*'https:\/\/github\.com\/basketikun\/chatgpt2api'/);
   assert.match(sidepanelSource, /'kiro-rs':\s*'https:\/\/github\.com\/QLHazyCoder\/kiro\.rs'/);
   assert.match(sidepanelSource, /webchat2api:\s*'https:\/\/github\.com\/zqbxdev\/webchat2api'/);
+  assert.match(sidepanelSource, /grok:[\s\S]*sub2api:\s*'https:\/\/github\.com\/Wei-Shaw\/sub2api'/);
   assert.doesNotMatch(sidepanelSource, /github\.com\/hank9999\/kiro\.rs/);
   assert.match(sidepanelSource, /btnOpenTargetRepository\?\.addEventListener\('click'/);
 });
@@ -201,6 +227,7 @@ const TARGET_REPOSITORY_URLS = Object.freeze({
   }),
   grok: Object.freeze({
     webchat2api: 'https://github.com/zqbxdev/webchat2api',
+    sub2api: 'https://github.com/Wei-Shaw/sub2api',
   }),
 });
 function normalizeFlowId(value) {
@@ -213,7 +240,7 @@ function normalizeTargetIdForFlow(flowId, targetId, fallback) {
   const targets = {
     openai: ['cpa', 'sub2api', 'codex2api', 'webchat', 'chatgpt2api'],
     kiro: ['kiro-rs'],
-    grok: ['webchat2api'],
+    grok: ['webchat2api', 'sub2api'],
   }[flowId] || [];
   return targets.includes(targetId) ? targetId : fallback;
 }
@@ -228,6 +255,7 @@ return { getTargetRepositoryUrl };
   assert.equal(api.getTargetRepositoryUrl('openai', 'webchat'), 'https://github.com/zqbxdev/webchat2api');
   assert.equal(api.getTargetRepositoryUrl('openai', 'chatgpt2api'), 'https://github.com/basketikun/chatgpt2api');
   assert.equal(api.getTargetRepositoryUrl('grok', 'webchat2api'), 'https://github.com/zqbxdev/webchat2api');
+  assert.equal(api.getTargetRepositoryUrl('grok', 'sub2api'), 'https://github.com/Wei-Shaw/sub2api');
   assert.equal(api.getTargetRepositoryUrl('openai', 'codex2api'), '');
 });
 

@@ -114,6 +114,17 @@ const rowSub2ApiAccountPriority = document.getElementById('row-sub2api-account-p
 const inputSub2ApiAccountPriority = document.getElementById('input-sub2api-account-priority');
 const rowSub2ApiDefaultProxy = document.getElementById('row-sub2api-default-proxy');
 const inputSub2ApiDefaultProxy = document.getElementById('input-sub2api-default-proxy');
+const rowGrokSub2ApiGroup = document.getElementById('row-grok-sub2api-group');
+const inputGrokSub2ApiGroup = document.getElementById('input-grok-sub2api-group');
+const grokSub2ApiGroupPickerRoot = document.getElementById('grok-sub2api-group-picker');
+const btnGrokSub2ApiGroupMenu = document.getElementById('btn-grok-sub2api-group-menu');
+const grokSub2ApiGroupCurrent = document.getElementById('grok-sub2api-group-current');
+const grokSub2ApiGroupMenu = document.getElementById('grok-sub2api-group-menu');
+const btnAddGrokSub2ApiGroup = document.getElementById('btn-add-grok-sub2api-group');
+const rowGrokSub2ApiAccountPriority = document.getElementById('row-grok-sub2api-account-priority');
+const inputGrokSub2ApiAccountPriority = document.getElementById('input-grok-sub2api-account-priority');
+const rowGrokSub2ApiDefaultProxy = document.getElementById('row-grok-sub2api-default-proxy');
+const inputGrokSub2ApiDefaultProxy = document.getElementById('input-grok-sub2api-default-proxy');
 const rowIpProxyEnabled = document.getElementById('row-ip-proxy-enabled');
 const inputIpProxyEnabled = document.getElementById('input-ip-proxy-enabled');
 const btnToggleIpProxySection = document.getElementById('btn-toggle-ip-proxy-section');
@@ -214,8 +225,8 @@ const rowGrokRegisterStatus = document.getElementById('row-grok-register-status'
 const displayGrokRegisterStatus = document.getElementById('display-grok-register-status');
 const rowGrokSsoStatus = document.getElementById('row-grok-sso-status');
 const displayGrokSsoStatus = document.getElementById('display-grok-sso-status');
-const rowGrokWebchat2ApiUploadStatus = document.getElementById('row-grok-webchat2api-upload-status');
-const displayGrokWebchat2ApiUploadStatus = document.getElementById('display-grok-webchat2api-upload-status');
+const rowGrokUploadStatus = document.getElementById('row-grok-upload-status');
+const displayGrokUploadStatus = document.getElementById('display-grok-upload-status');
 const rowGrokSsoSettings = document.getElementById('row-grok-sso-settings');
 const displayGrokSsoCookie = document.getElementById('display-grok-sso-cookie');
 const btnCopyGrokSso = document.getElementById('btn-copy-grok-sso');
@@ -1745,6 +1756,7 @@ async function sendSidepanelMessage(message = {}) {
 window.sendSidepanelMessage = sendSidepanelMessage;
 
 const DEFAULT_SUB2API_GROUP_OPTIONS = ['codex', 'openai-plus'];
+const DEFAULT_GROK_SUB2API_GROUP_OPTIONS = [];
 const editableListPickerModule = window.SidepanelEditableListPicker || {};
 const normalizeEditableListValues = editableListPickerModule.normalizeEditableListValues
   || ((...sources) => {
@@ -1803,6 +1815,18 @@ function getSub2ApiGroupOptionsState(state = latestState) {
   return options.length ? options : [...DEFAULT_SUB2API_GROUP_OPTIONS];
 }
 
+function getSelectedGrokSub2ApiGroupName() {
+  return String(inputGrokSub2ApiGroup?.value || '').trim();
+}
+
+function getGrokSub2ApiGroupOptionsState(state = latestState) {
+  const options = normalizeSub2ApiGroupOptions(
+    state?.grokSub2apiGroupNames,
+    state?.grokSub2apiGroupName
+  );
+  return options;
+}
+
 const sub2ApiGroupPicker = createEditableListPicker({
   root: sub2ApiGroupPickerRoot,
   input: inputSub2ApiGroup,
@@ -1814,6 +1838,20 @@ const sub2ApiGroupPicker = createEditableListPicker({
   itemLabel: '分组',
   onDelete: handleDeleteSub2ApiGroup,
   onDeleteError: (error) => showToast(error?.message || '删除 SUB2API 分组失败。', 'error'),
+});
+
+const grokSub2ApiGroupPicker = createEditableListPicker({
+  root: grokSub2ApiGroupPickerRoot,
+  input: inputGrokSub2ApiGroup,
+  trigger: btnGrokSub2ApiGroupMenu,
+  current: grokSub2ApiGroupCurrent,
+  menu: grokSub2ApiGroupMenu,
+  emptyLabel: '请先添加分组',
+  fallbackItems: DEFAULT_GROK_SUB2API_GROUP_OPTIONS,
+  minItems: 0,
+  itemLabel: '分组',
+  onDelete: handleDeleteGrokSub2ApiGroup,
+  onDeleteError: (error) => showToast(error?.message || '删除 Grok SUB2API 分组失败。', 'error'),
 });
 
 const cfDomainPicker = createEditableListPicker({
@@ -1860,6 +1898,26 @@ function renderSub2ApiGroupOptions(state = latestState, selectedValue = '') {
 
   sub2ApiGroupPicker.render(options, selected || options[0] || DEFAULT_SUB2API_GROUP_OPTIONS[0]);
 }
+
+function renderGrokSub2ApiGroupOptions(state = latestState, selectedValue = '') {
+  if (!inputGrokSub2ApiGroup) {
+    return;
+  }
+
+  const selected = String(selectedValue || state?.grokSub2apiGroupName || '').trim();
+  const options = getGrokSub2ApiGroupOptionsState({
+    ...(state || {}),
+    grokSub2apiGroupName: selected || state?.grokSub2apiGroupName,
+  });
+  if (selected && !options.some((name) => name.toLowerCase() === selected.toLowerCase())) {
+    options.unshift(selected);
+  }
+
+  grokSub2ApiGroupPicker.render(
+    options,
+    selected || options[0] || ''
+  );
+}
 let customEmailPoolEntriesState = [];
 
 const EYE_OPEN_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
@@ -1876,6 +1934,7 @@ const TARGET_REPOSITORY_URLS = Object.freeze({
   }),
   grok: Object.freeze({
     webchat2api: 'https://github.com/zqbxdev/webchat2api',
+    sub2api: 'https://github.com/Wei-Shaw/sub2api',
   }),
 });
 const PRIVACY_MASKED_INPUT_IDS = Object.freeze([
@@ -1883,6 +1942,7 @@ const PRIVACY_MASKED_INPUT_IDS = Object.freeze([
   'input-sub2api-url',
   'input-sub2api-email',
   'input-sub2api-default-proxy',
+  'input-grok-sub2api-default-proxy',
   'input-codex2api-url',
   'input-openai-webchat-url',
   'input-openai-chatgpt2api-url',
@@ -2847,17 +2907,18 @@ function getGrokRegisterStatusLabel(value = '') {
   }
 }
 
-function getGrokWebchat2ApiUploadStatusLabel(value = '') {
+function getGrokUploadStatusLabel(value = '', targetId = '') {
   const normalized = String(value || '').trim().toLowerCase();
+  const isSub2Api = String(targetId || '').trim().toLowerCase() === 'sub2api';
   switch (normalized) {
     case 'reading_session':
       return '正在读取会话';
     case 'uploading':
-      return '正在上传';
+      return isSub2Api ? '正在导入' : '正在上传';
     case 'uploaded':
-      return '已上传';
+      return isSub2Api ? '已导入' : '已上传';
     case 'error':
-      return '上传失败';
+      return isSub2Api ? '导入失败' : '上传失败';
     default:
       return String(value || '').trim() || '未开始';
   }
@@ -3048,6 +3109,7 @@ function renderGrokRuntimeState(state = latestState) {
     || 0
   ) || 0;
   const uploadState = runtimeState?.upload || {};
+  const uploadTargetId = String(uploadState.targetId || 'webchat2api').trim().toLowerCase();
   const uploadStatus = String(
     uploadState.status
     || state?.grokWebchat2ApiUploadStatus
@@ -3083,11 +3145,11 @@ function renderGrokRuntimeState(state = latestState) {
       : '未提取';
     displayGrokSsoCookie.title = currentCookie ? '已隐藏完整 SSO Cookie，可使用复制' : '';
   }
-  if (displayGrokWebchat2ApiUploadStatus) {
-    const label = getGrokWebchat2ApiUploadStatusLabel(uploadStatus);
+  if (displayGrokUploadStatus) {
+    const label = getGrokUploadStatusLabel(uploadStatus, uploadTargetId);
     const suffix = uploadedAt ? `，${new Date(uploadedAt).toLocaleString()}` : '';
-    displayGrokWebchat2ApiUploadStatus.textContent = `${label}${uploadMessage ? `：${uploadMessage}` : ''}${suffix}`;
-    displayGrokWebchat2ApiUploadStatus.title = uploadTargetUrl || '';
+    displayGrokUploadStatus.textContent = `${label}${uploadMessage ? `：${uploadMessage}` : ''}${suffix}`;
+    displayGrokUploadStatus.title = uploadTargetUrl || '';
   }
   [btnCopyGrokSso, btnClearGrokSso].forEach((button) => {
     if (button) {
@@ -5187,6 +5249,27 @@ function collectSettingsPayload() {
   if (sub2apiGroupNames.length === 0) {
     appendSub2ApiGroupNames(['codex', 'openai-plus']);
   }
+  const selectedGrokSub2ApiGroupName = String(
+    typeof inputGrokSub2ApiGroup !== 'undefined' && inputGrokSub2ApiGroup
+      ? inputGrokSub2ApiGroup.value
+      : latestState?.grokSub2apiGroupName
+  ).trim();
+  const normalizeGrokSub2ApiGroupOptions = typeof normalizeSub2ApiGroupOptions === 'function'
+    ? normalizeSub2ApiGroupOptions
+    : ((...sources) => Array.from(new Set(
+      sources
+        .flatMap((value) => (Array.isArray(value) ? value : String(value || '').split(/[\r\n,，、]+/)))
+        .map((value) => String(value || '').trim())
+        .filter(Boolean)
+    )));
+  const grokSub2apiGroupNames = normalizeGrokSub2ApiGroupOptions(
+    latestState?.grokSub2apiGroupNames,
+    latestState?.grokSub2apiGroupName,
+    selectedGrokSub2ApiGroupName
+  );
+  const grokSub2apiDefaultProxyName = typeof inputGrokSub2ApiDefaultProxy !== 'undefined' && inputGrokSub2ApiDefaultProxy
+    ? inputGrokSub2ApiDefaultProxy.value.trim()
+    : String(latestState?.grokSub2apiDefaultProxyName || '').trim();
   const sub2apiAccountPriorityNormalizer = typeof normalizeSub2ApiAccountPriorityValue === 'function'
     ? normalizeSub2ApiAccountPriorityValue
     : ((value) => {
@@ -5322,6 +5405,14 @@ function collectSettingsPayload() {
         : latestState?.sub2apiAccountPriority
     ),
     sub2apiDefaultProxyName: inputSub2ApiDefaultProxy.value.trim(),
+    grokSub2apiGroupName: selectedGrokSub2ApiGroupName,
+    grokSub2apiGroupNames,
+    grokSub2apiAccountPriority: sub2apiAccountPriorityNormalizer(
+      typeof inputGrokSub2ApiAccountPriority !== 'undefined' && inputGrokSub2ApiAccountPriority
+        ? inputGrokSub2ApiAccountPriority.value
+        : latestState?.grokSub2apiAccountPriority
+    ),
+    grokSub2apiDefaultProxyName,
     ipProxyEnabled: getSelectedIpProxyEnabledSafe(),
     ipProxyService: selectedIpProxyService,
     ipProxyMode: currentIpProxyServiceProfile.mode,
@@ -11586,6 +11677,9 @@ function applyAutoRunStatus(payload = currentAutoRun) {
   if (typeof inputSub2ApiAccountPriority !== 'undefined' && inputSub2ApiAccountPriority) {
     inputSub2ApiAccountPriority.disabled = locked;
   }
+  if (typeof inputGrokSub2ApiAccountPriority !== 'undefined' && inputGrokSub2ApiAccountPriority) {
+    inputGrokSub2ApiAccountPriority.disabled = locked;
+  }
   inputAutoSkipFailures.disabled = locked;
 
   const lockedRunCount = typeof getLockedRunCountFromEmailPool === 'function'
@@ -11961,6 +12055,15 @@ function applySettingsState(state) {
     inputSub2ApiAccountPriority.value = String(normalizeSub2ApiAccountPriorityValue(state?.sub2apiAccountPriority));
   }
   inputSub2ApiDefaultProxy.value = state?.sub2apiDefaultProxyName || '';
+  if (typeof renderGrokSub2ApiGroupOptions === 'function') {
+    renderGrokSub2ApiGroupOptions(state, state?.grokSub2apiGroupName || '');
+  }
+  if (typeof inputGrokSub2ApiAccountPriority !== 'undefined' && inputGrokSub2ApiAccountPriority) {
+    inputGrokSub2ApiAccountPriority.value = String(normalizeSub2ApiAccountPriorityValue(state?.grokSub2apiAccountPriority));
+  }
+  if (typeof inputGrokSub2ApiDefaultProxy !== 'undefined' && inputGrokSub2ApiDefaultProxy) {
+    inputGrokSub2ApiDefaultProxy.value = state?.grokSub2apiDefaultProxyName || '';
+  }
   if (typeof inputKiroRsUrl !== 'undefined' && inputKiroRsUrl) {
     inputKiroRsUrl.value = String(state?.kiroRsUrl || '').trim();
   }
@@ -14379,6 +14482,86 @@ async function handleDeleteSub2ApiGroup(groupName) {
   markSettingsDirty(true);
   await saveSettings({ silent: true }).catch(() => { });
   showToast(`已删除 SUB2API 分组：${targetName}`, 'success', 1600);
+}
+
+async function handleAddGrokSub2ApiGroup() {
+  if (!sharedFormDialog?.open) {
+    showToast('表单弹窗未加载，请刷新扩展后重试。', 'error');
+    return;
+  }
+
+  const result = await sharedFormDialog.open({
+    title: '添加 Grok SUB2API 分组',
+    confirmLabel: '添加',
+    confirmVariant: 'btn-primary',
+    fields: [
+      {
+        key: 'groupName',
+        label: '分组',
+        type: 'text',
+        placeholder: '例如 grok-team',
+        autocomplete: 'off',
+        required: true,
+        requiredMessage: '请先填写 Grok SUB2API 分组名称。',
+        validate: (value) => (
+          normalizeSub2ApiGroupOptions(value).length
+            ? ''
+            : '请先填写 Grok SUB2API 分组名称。'
+        ),
+      },
+    ],
+  });
+  if (!result) {
+    return;
+  }
+
+  const newGroups = normalizeSub2ApiGroupOptions(result.groupName);
+  if (!newGroups.length) {
+    return;
+  }
+
+  const selectedGroup = newGroups[0];
+  const nextGroups = normalizeSub2ApiGroupOptions(
+    getGrokSub2ApiGroupOptionsState(latestState),
+    newGroups
+  );
+  syncLatestState({
+    grokSub2apiGroupName: selectedGroup,
+    grokSub2apiGroupNames: nextGroups,
+  });
+  renderGrokSub2ApiGroupOptions(latestState, selectedGroup);
+  markSettingsDirty(true);
+  await saveSettings({ silent: true }).catch(() => { });
+  showToast(`已添加并切换到 Grok SUB2API 分组：${selectedGroup}`, 'success', 1800);
+}
+
+async function handleDeleteGrokSub2ApiGroup(groupName) {
+  const targetName = String(groupName || '').trim();
+  if (!targetName) {
+    return;
+  }
+
+  const currentGroups = getGrokSub2ApiGroupOptionsState(latestState);
+  const targetKey = targetName.toLowerCase();
+  const nextGroups = currentGroups.filter((name) => name.toLowerCase() !== targetKey);
+  if (nextGroups.length === currentGroups.length) {
+    return;
+  }
+
+  const currentGroup = getSelectedGrokSub2ApiGroupName();
+  const nextSelectedGroup = currentGroup.toLowerCase() === targetKey
+    ? (nextGroups[0] || '')
+    : (nextGroups.find((name) => name.toLowerCase() === currentGroup.toLowerCase()) || nextGroups[0] || '');
+
+  syncLatestState({
+    grokSub2apiGroupName: nextSelectedGroup,
+    grokSub2apiGroupNames: nextGroups,
+  });
+  renderGrokSub2ApiGroupOptions(latestState, nextSelectedGroup);
+  grokSub2ApiGroupPicker.setOpen(nextGroups.length > 0);
+  markSettingsDirty(true);
+  await saveSettings({ silent: true }).catch(() => { });
+  showToast(`已删除 Grok SUB2API 分组：${targetName}`, 'success', 1600);
 }
 
 function updatePanelModeUI() {
@@ -17081,6 +17264,43 @@ inputSub2ApiDefaultProxy.addEventListener('blur', () => {
   saveSettings({ silent: true }).catch(() => { });
 });
 
+inputGrokSub2ApiGroup.addEventListener('change', () => {
+  syncLatestState({
+    grokSub2apiGroupName: getSelectedGrokSub2ApiGroupName(),
+    grokSub2apiGroupNames: normalizeSub2ApiGroupOptions(
+      getGrokSub2ApiGroupOptionsState(latestState),
+      getSelectedGrokSub2ApiGroupName()
+    ),
+  });
+  markSettingsDirty(true);
+  saveSettings({ silent: true }).catch(() => { });
+});
+
+inputGrokSub2ApiAccountPriority.addEventListener('input', () => {
+  markSettingsDirty(true);
+  scheduleSettingsAutoSave();
+});
+inputGrokSub2ApiAccountPriority.addEventListener('blur', () => {
+  inputGrokSub2ApiAccountPriority.value = String(
+    normalizeSub2ApiAccountPriorityValue(inputGrokSub2ApiAccountPriority.value)
+  );
+  saveSettings({ silent: true }).catch(() => { });
+});
+
+btnAddGrokSub2ApiGroup?.addEventListener('click', () => {
+  handleAddGrokSub2ApiGroup().catch((error) => {
+    showToast(error?.message || '添加 Grok SUB2API 分组失败。', 'error');
+  });
+});
+
+inputGrokSub2ApiDefaultProxy.addEventListener('input', () => {
+  markSettingsDirty(true);
+  scheduleSettingsAutoSave();
+});
+inputGrokSub2ApiDefaultProxy.addEventListener('blur', () => {
+  saveSettings({ silent: true }).catch(() => { });
+});
+
 inputCodex2ApiUrl.addEventListener('input', () => {
   markSettingsDirty(true);
   scheduleSettingsAutoSave();
@@ -18766,6 +18986,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         || message.payload.sub2apiGroupNames !== undefined
       ) {
         renderSub2ApiGroupOptions(latestState, latestState?.sub2apiGroupName || '');
+      }
+      if (
+        message.payload.grokSub2apiGroupName !== undefined
+        || message.payload.grokSub2apiGroupNames !== undefined
+      ) {
+        renderGrokSub2ApiGroupOptions(latestState, latestState?.grokSub2apiGroupName || '');
       }
       if (
         message.payload.ipProxyEnabled !== undefined

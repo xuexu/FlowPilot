@@ -277,6 +277,7 @@ test('grok SSO extraction stores only the current cookie without logging the sec
             cookies: ['old-cookie'],
           },
           upload: {
+            targetId: 'sub2api',
             status: 'uploaded',
             uploadedAt: 1000,
             message: 'old upload',
@@ -328,6 +329,7 @@ test('grok SSO extraction stores only the current cookie without logging the sec
   assert.equal(getGrokRuntime(completedPayload).sso.currentCookie, 'new-cookie');
   assert.deepEqual(getGrokRuntime(completedPayload).sso.cookies, ['new-cookie']);
   assert.equal(getGrokRuntime(completedPayload).upload.status, '');
+  assert.equal(getGrokRuntime(completedPayload).upload.targetId, '');
   assert.equal(getGrokRuntime(completedPayload).upload.targetUrl, '');
   assert.equal(markUsedPayload.grokSsoCookie, 'new-cookie');
   assert.equal(logs.some(({ message }) => message.includes('new-cookie')), false);

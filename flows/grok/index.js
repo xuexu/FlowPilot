@@ -28,7 +28,7 @@
       supportsAccountContribution: false,
       supportsOpenAiOAuthContribution: false,
       contributionAdapterIds: [],
-      supportedTargetIds: ['webchat2api'],
+      supportedTargetIds: ['webchat2api', 'sub2api'],
       supportsLuckmail: false,
       canSwitchFlow: true,
       stepDefinitionMode: 'grok',
@@ -45,6 +45,22 @@
         defaultState: {
           baseUrl: '',
           apiKey: '',
+        },
+      },
+      sub2api: {
+        id: 'sub2api',
+        label: 'SUB2API',
+        groups: [
+          'grok-target-sub2api',
+        ],
+        defaultState: {
+          sub2apiUrl: '',
+          sub2apiEmail: '',
+          sub2apiPassword: '',
+          sub2apiGroupName: '',
+          sub2apiGroupNames: [],
+          sub2apiAccountPriority: 1,
+          sub2apiDefaultProxyName: '',
         },
       },
     },
@@ -115,6 +131,12 @@
           'grok-upload-sso-to-webchat2api',
         ],
       },
+      'flows/grok/background/publisher-sub2api': {
+        sourceId: 'grok-sub2api',
+        commands: [
+          'grok-import-sso-to-sub2api',
+        ],
+      },
     },
     defaultTargetId: 'webchat2api',
     settingsDefaults: {
@@ -122,6 +144,15 @@
         webchat2api: {
           baseUrl: '',
           apiKey: '',
+        },
+        sub2api: {
+          sub2apiUrl: '',
+          sub2apiEmail: '',
+          sub2apiPassword: '',
+          sub2apiGroupName: '',
+          sub2apiGroupNames: [],
+          sub2apiAccountPriority: 1,
+          sub2apiDefaultProxyName: '',
         },
       },
       autoRun: {
@@ -139,7 +170,18 @@
         rowIds: [
           'row-grok-webchat2api-url',
           'row-grok-webchat2api-key',
-          'row-grok-sso-settings',
+        ],
+      },
+      'grok-target-sub2api': {
+        id: 'grok-target-sub2api',
+        label: 'SUB2API',
+        rowIds: [
+          'row-sub2api-url',
+          'row-sub2api-email',
+          'row-sub2api-password',
+          'row-grok-sub2api-group',
+          'row-grok-sub2api-account-priority',
+          'row-grok-sub2api-default-proxy',
         ],
       },
       'grok-runtime-status': {
@@ -148,7 +190,8 @@
         rowIds: [
           'row-grok-register-status',
           'row-grok-sso-status',
-          'row-grok-webchat2api-upload-status',
+          'row-grok-sso-settings',
+          'row-grok-upload-status',
         ],
       },
     },

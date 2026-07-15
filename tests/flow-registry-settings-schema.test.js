@@ -65,12 +65,36 @@ test('flow registry exposes canonical flow and target metadata', () => {
     ['grok-runtime-status', 'shared-auto-run', 'grok-target-webchat2api', 'service-account', 'service-email', 'service-proxy']
   );
   assert.deepEqual(
+    flowRegistry.getVisibleGroupIds('grok', 'sub2api'),
+    ['grok-runtime-status', 'shared-auto-run', 'grok-target-sub2api', 'service-account', 'service-email', 'service-proxy']
+  );
+  assert.deepEqual(
+    flowRegistry.getSettingsGroupDefinition('grok-target-sub2api')?.rowIds,
+    [
+      'row-sub2api-url',
+      'row-sub2api-email',
+      'row-sub2api-password',
+      'row-grok-sub2api-group',
+      'row-grok-sub2api-account-priority',
+      'row-grok-sub2api-default-proxy',
+    ]
+  );
+  assert.deepEqual(
+    flowRegistry.getSettingsGroupDefinition('grok-runtime-status')?.rowIds,
+    [
+      'row-grok-register-status',
+      'row-grok-sso-status',
+      'row-grok-sso-settings',
+      'row-grok-upload-status',
+    ]
+  );
+  assert.deepEqual(
     flowRegistry.getTargetOptions('openai').map((entry) => entry.id),
     ['cpa', 'sub2api', 'codex2api', 'webchat', 'chatgpt2api']
   );
   assert.deepEqual(
     flowRegistry.getTargetOptions('grok').map((entry) => entry.id),
-    ['webchat2api']
+    ['webchat2api', 'sub2api']
   );
   assert.equal(
     flowRegistry.getTargetCapabilities('openai', 'webchat')?.supportsPhoneSignup,
@@ -104,7 +128,7 @@ test('flow registry exposes canonical flow and target metadata', () => {
   assert.equal(flowRegistry.getFlowCapabilities('openai').supportsAccountContribution, true);
   assert.equal(flowRegistry.getFlowCapabilities('kiro').supportsAccountContribution, true);
   assert.equal(flowRegistry.getFlowCapabilities('grok').supportsAccountContribution, false);
-  assert.deepEqual(flowRegistry.getFlowCapabilities('grok').supportedTargetIds, ['webchat2api']);
+  assert.deepEqual(flowRegistry.getFlowCapabilities('grok').supportedTargetIds, ['webchat2api', 'sub2api']);
   assert.deepEqual(
     flowRegistry.getFlowCapabilities('openai').contributionAdapterIds,
     ['openai-oauth', 'openai-codex-file', 'openai-sub2api-file']
@@ -228,6 +252,111 @@ test('settings schema shares webchat connection config between OpenAI and Grok t
   assert.equal(fromOpenAiNested.flows.grok.targets.webchat2api.baseUrl, 'https://nested-openai.example.com/admin');
   assert.equal(fromOpenAiNested.flows.openai.targets.webchat.apiKey, 'nested-openai-key');
   assert.equal(fromOpenAiNested.flows.grok.targets.webchat2api.apiKey, 'nested-openai-key');
+});
+
+test('settings schema shares SUB2API credentials while keeping Grok policy independent', () => {
+  const { settingsSchema } = loadApis();
+  const schema = settingsSchema.createSettingsSchema();
+
+  const normalized = schema.normalizeSettingsState({
+    activeFlowId: 'grok',
+    targetId: 'sub2api',
+    sub2apiUrl: ' https://sub2api.example.com/admin/accounts ',
+    sub2apiEmail: ' owner@example.com ',
+    sub2apiPassword: 'shared-secret',
+    sub2apiGroupName: 'openai-pool',
+    sub2apiGroupNames: ['openai-pool'],
+    sub2apiAccountPriority: 7,
+    sub2apiDefaultProxyName: 'openai-proxy',
+    grokSub2apiGroupName: 'grok-pool',
+    grokSub2apiGroupNames: ['grok-default', 'grok-pool'],
+    grokSub2apiAccountPriority: 3,
+    grokSub2apiDefaultProxyName: 'xai-proxy',
+  });
+  const view = schema.buildSettingsView(normalized);
+  const openAiTarget = normalized.flows.openai.targets.sub2api;
+  const grokTarget = normalized.flows.grok.targets.sub2api;
+
+  assert.equal(normalized.flows.grok.selectedTargetId, 'sub2api');
+  assert.equal(openAiTarget.sub2apiUrl, 'https://sub2api.example.com/admin/accounts');
+  assert.equal(grokTarget.sub2apiUrl, openAiTarget.sub2apiUrl);
+  assert.equal(grokTarget.sub2apiEmail, 'owner@example.com');
+  assert.equal(grokTarget.sub2apiPassword, 'shared-secret');
+  assert.equal(openAiTarget.sub2apiGroupName, 'openai-pool');
+  assert.equal(openAiTarget.sub2apiAccountPriority, 7);
+  assert.equal(openAiTarget.sub2apiDefaultProxyName, 'openai-proxy');
+  assert.equal(grokTarget.sub2apiGroupName, 'grok-pool');
+  assert.deepEqual(grokTarget.sub2apiGroupNames, ['grok-default', 'grok-pool']);
+  assert.equal(grokTarget.sub2apiAccountPriority, 3);
+  assert.equal(grokTarget.sub2apiDefaultProxyName, 'xai-proxy');
+  assert.equal(view.grokSub2apiGroupName, 'grok-pool');
+  assert.deepEqual(view.grokSub2apiGroupNames, ['grok-default', 'grok-pool']);
+  assert.equal(view.grokSub2apiAccountPriority, 3);
+  assert.equal(view.grokSub2apiDefaultProxyName, 'xai-proxy');
+
+  const conflictingSettingsState = {
+    flows: {
+      openai: {
+        targets: {
+          sub2api: {
+            sub2apiUrl: 'https://openai-canonical.example.com',
+            sub2apiEmail: 'openai-canonical@example.com',
+            sub2apiPassword: 'openai-canonical-secret',
+          },
+        },
+      },
+      grok: {
+        targets: {
+          sub2api: {
+            sub2apiUrl: 'https://grok-canonical.example.com',
+            sub2apiEmail: 'grok-canonical@example.com',
+            sub2apiPassword: 'grok-canonical-secret',
+          },
+        },
+      },
+    },
+  };
+  const canonicalConflict = schema.normalizeSettingsState({ settingsState: conflictingSettingsState });
+  assert.equal(canonicalConflict.flows.openai.targets.sub2api.sub2apiUrl, 'https://openai-canonical.example.com');
+  assert.equal(canonicalConflict.flows.grok.targets.sub2api.sub2apiEmail, 'openai-canonical@example.com');
+  assert.equal(canonicalConflict.flows.grok.targets.sub2api.sub2apiPassword, 'openai-canonical-secret');
+
+  const explicitFlatConflict = schema.normalizeSettingsState({
+    settingsState: conflictingSettingsState,
+    sub2apiUrl: 'https://flat.example.com',
+    sub2apiEmail: 'flat@example.com',
+    sub2apiPassword: 'flat-secret',
+  });
+  assert.equal(explicitFlatConflict.flows.openai.targets.sub2api.sub2apiUrl, 'https://flat.example.com');
+  assert.equal(explicitFlatConflict.flows.grok.targets.sub2api.sub2apiEmail, 'flat@example.com');
+  assert.equal(explicitFlatConflict.flows.grok.targets.sub2api.sub2apiPassword, 'flat-secret');
+
+  const grokCanonicalFallback = schema.normalizeSettingsState({
+    settingsState: {
+      flows: {
+        grok: conflictingSettingsState.flows.grok,
+      },
+    },
+  });
+  assert.equal(grokCanonicalFallback.flows.openai.targets.sub2api.sub2apiUrl, 'https://grok-canonical.example.com');
+  assert.equal(grokCanonicalFallback.flows.openai.targets.sub2api.sub2apiEmail, 'grok-canonical@example.com');
+  assert.equal(grokCanonicalFallback.flows.grok.targets.sub2api.sub2apiPassword, 'grok-canonical-secret');
+});
+
+test('Grok SUB2API group policy starts empty and remains empty until configured', () => {
+  const { settingsSchema } = loadApis();
+  const schema = settingsSchema.createSettingsSchema();
+
+  const normalized = schema.normalizeSettingsState({
+    activeFlowId: 'grok',
+    targetId: 'sub2api',
+  });
+  const view = schema.buildSettingsView(normalized);
+
+  assert.equal(normalized.flows.grok.targets.sub2api.sub2apiGroupName, '');
+  assert.deepEqual(normalized.flows.grok.targets.sub2api.sub2apiGroupNames, []);
+  assert.equal(view.grokSub2apiGroupName, '');
+  assert.deepEqual(view.grokSub2apiGroupNames, []);
 });
 
 test('settings schema keeps ChatGPT2API config independent from shared webchat config', () => {

@@ -703,6 +703,7 @@
               extractedAt: completedAt,
             },
             upload: {
+              targetId: '',
               status: '',
               uploadedAt: 0,
               message: '',

@@ -49,6 +49,7 @@ importScripts(
   'flows/kiro/background/desktop-authorize-runner.js',
   'flows/kiro/background/publisher-kiro-rs.js',
   'flows/grok/background/publisher-webchat2api.js',
+  'flows/grok/background/publisher-sub2api.js',
   'flows/openai/background/session-reader.js',
   'flows/openai/background/publisher-webchat.js',
   'flows/openai/background/publisher-chatgpt2api.js',
@@ -917,6 +918,7 @@ function getStepDefinitionsForState(state = {}) {
     const activeFlowId = String(resolvedState?.activeFlowId || '').trim().toLowerCase() || defaultFlowId;
     const definitions = rootScope.MultiPageStepDefinitions.getSteps({
       activeFlowId,
+      targetId: resolvedState?.targetId,
       plusModeEnabled: Boolean(resolvedState?.plusModeEnabled),
       plusPaymentMethod: normalizePlusPaymentMethod(resolvedState?.plusPaymentMethod),
       plusAccountAccessStrategy: normalizePlusAccountAccessStrategy(resolvedState?.plusAccountAccessStrategy),
@@ -1226,6 +1228,10 @@ const PERSISTED_SETTING_DEFAULTS = {
   sub2apiGroupNames: DEFAULT_SUB2API_GROUP_NAMES,
   sub2apiAccountPriority: DEFAULT_SUB2API_ACCOUNT_PRIORITY,
   sub2apiDefaultProxyName: DEFAULT_SUB2API_PROXY_NAME,
+  grokSub2apiGroupName: '',
+  grokSub2apiGroupNames: [],
+  grokSub2apiAccountPriority: DEFAULT_SUB2API_ACCOUNT_PRIORITY,
+  grokSub2apiDefaultProxyName: '',
   ipProxyEnabled: false,
   ipProxyService: DEFAULT_IP_PROXY_SERVICE,
   ipProxyMode: DEFAULT_IP_PROXY_MODE,
@@ -1387,6 +1393,10 @@ const SETTINGS_SCHEMA_VIEW_KEYS = Object.freeze([
   'sub2apiGroupNames',
   'sub2apiAccountPriority',
   'sub2apiDefaultProxyName',
+  'grokSub2apiGroupName',
+  'grokSub2apiGroupNames',
+  'grokSub2apiAccountPriority',
+  'grokSub2apiDefaultProxyName',
   'codex2apiUrl',
   'codex2apiAdminKey',
   'customPassword',
@@ -3201,6 +3211,13 @@ function normalizePersistentSettingValue(key, value) {
       return normalizeSub2ApiAccountPriority(value);
     case 'sub2apiDefaultProxyName':
       return String(value || '').trim();
+    case 'grokSub2apiGroupName':
+    case 'grokSub2apiDefaultProxyName':
+      return String(value || '').trim();
+    case 'grokSub2apiGroupNames':
+      return normalizeSub2ApiGroupNames(value);
+    case 'grokSub2apiAccountPriority':
+      return normalizeSub2ApiAccountPriority(value);
     case 'ipProxyEnabled':
       return Boolean(value);
     case 'ipProxyService':
@@ -3762,13 +3779,20 @@ function buildSettingsStatePatchFromFlatUpdates(updates = {}) {
   assignIfUpdated('vpsUrl', ['flows', 'openai', 'targets', 'cpa', 'vpsUrl']);
   assignIfUpdated('vpsPassword', ['flows', 'openai', 'targets', 'cpa', 'vpsPassword']);
   assignIfUpdated('localCpaStep9Mode', ['flows', 'openai', 'targets', 'cpa', 'localCpaStep9Mode']);
-  assignIfUpdated('sub2apiUrl', ['flows', 'openai', 'targets', 'sub2api', 'sub2apiUrl']);
-  assignIfUpdated('sub2apiEmail', ['flows', 'openai', 'targets', 'sub2api', 'sub2apiEmail']);
-  assignIfUpdated('sub2apiPassword', ['flows', 'openai', 'targets', 'sub2api', 'sub2apiPassword']);
+  for (const key of ['sub2apiUrl', 'sub2apiEmail', 'sub2apiPassword']) {
+    if (hasUpdate(key)) {
+      setSettingsStatePatchValue(patch, ['flows', 'openai', 'targets', 'sub2api', key], updates[key]);
+      setSettingsStatePatchValue(patch, ['flows', 'grok', 'targets', 'sub2api', key], updates[key]);
+    }
+  }
   assignIfUpdated('sub2apiGroupName', ['flows', 'openai', 'targets', 'sub2api', 'sub2apiGroupName']);
   assignIfUpdated('sub2apiGroupNames', ['flows', 'openai', 'targets', 'sub2api', 'sub2apiGroupNames']);
   assignIfUpdated('sub2apiAccountPriority', ['flows', 'openai', 'targets', 'sub2api', 'sub2apiAccountPriority']);
   assignIfUpdated('sub2apiDefaultProxyName', ['flows', 'openai', 'targets', 'sub2api', 'sub2apiDefaultProxyName']);
+  assignIfUpdated('grokSub2apiGroupName', ['flows', 'grok', 'targets', 'sub2api', 'sub2apiGroupName']);
+  assignIfUpdated('grokSub2apiGroupNames', ['flows', 'grok', 'targets', 'sub2api', 'sub2apiGroupNames']);
+  assignIfUpdated('grokSub2apiAccountPriority', ['flows', 'grok', 'targets', 'sub2api', 'sub2apiAccountPriority']);
+  assignIfUpdated('grokSub2apiDefaultProxyName', ['flows', 'grok', 'targets', 'sub2api', 'sub2apiDefaultProxyName']);
   assignIfUpdated('codex2apiUrl', ['flows', 'openai', 'targets', 'codex2api', 'codex2apiUrl']);
   assignIfUpdated('codex2apiAdminKey', ['flows', 'openai', 'targets', 'codex2api', 'codex2apiAdminKey']);
   assignIfUpdated('customPassword', ['services', 'account', 'customPassword']);
@@ -4364,6 +4388,7 @@ async function clearGrokSsoCookies() {
         extractedAt: 0,
       },
       upload: {
+        targetId: '',
         status: '',
         uploadedAt: 0,
         message: '',
@@ -11023,6 +11048,7 @@ const AUTO_RUN_BACKGROUND_COMPLETED_STEP_KEYS = new Set([
   'grok-submit-profile',
   'grok-extract-sso-cookie',
   'grok-upload-sso-to-webchat2api',
+  'grok-import-sso-to-sub2api',
 ]);
 const STEP_COMPLETION_SIGNAL_STEP_KEYS = new Set([
   'fill-password',
@@ -14000,6 +14026,13 @@ const grokWebchat2ApiPublisher = self.MultiPageBackgroundGrokPublisherWebchat2Ap
   getState,
   setState,
 });
+const grokSub2ApiPublisher = self.MultiPageBackgroundGrokPublisherSub2Api?.createGrokSub2ApiPublisher({
+  addLog,
+  completeNodeFromBackground,
+  getState,
+  normalizeSub2ApiUrl,
+  setState,
+});
 const openAiWebchatPublisher = self.MultiPageBackgroundOpenAiPublisherWebchat?.createOpenAiWebchatPublisher({
   addLog,
   broadcastDataUpdate,
@@ -14131,6 +14164,7 @@ const stepExecutorsByKey = {
   'grok-submit-profile': (state) => grokRegisterRunner.executeGrokSubmitProfile(state),
   'grok-extract-sso-cookie': (state) => grokRegisterRunner.executeGrokExtractSsoCookie(state),
   'grok-upload-sso-to-webchat2api': (state) => grokWebchat2ApiPublisher.executeGrokUploadSsoToWebchat2Api(state),
+  'grok-import-sso-to-sub2api': (state) => grokSub2ApiPublisher.executeGrokImportSsoToSub2Api(state),
 };
 const messageRouter = self.MultiPageBackgroundMessageRouter?.createMessageRouter({
   addLog,

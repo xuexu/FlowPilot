@@ -108,6 +108,7 @@
         extractedAt: 0,
       },
       upload: {
+        targetId: '',
         status: '',
         uploadedAt: 0,
         message: '',
@@ -142,6 +143,7 @@
         extractedAt: Math.max(0, normalizeInteger(merged.sso?.extractedAt)),
       },
       upload: {
+        targetId: cleanString(merged.upload?.targetId),
         status: cleanString(merged.upload?.status),
         uploadedAt: Math.max(0, normalizeInteger(merged.upload?.uploadedAt)),
         message: cleanString(merged.upload?.message),
@@ -222,7 +224,7 @@
     assignPositiveInteger(flatRuntime.upload, 'uploadedAt', state.grokWebchat2ApiUploadedAt);
     assignCleanString(flatRuntime.upload, 'message', state.grokWebchat2ApiUploadMessage);
     assignCleanString(flatRuntime.upload, 'targetUrl', state.grokWebchat2ApiTargetUrl);
-    return normalizeRuntimeState(deepMerge(deepMerge(runtimeFlowState.grok || {}, legacyFlowState), flatRuntime));
+    return normalizeRuntimeState(deepMerge(deepMerge(flatRuntime, legacyFlowState), runtimeFlowState.grok || {}));
   }
 
   function buildStateView(state = {}) {
@@ -297,6 +299,7 @@
     return buildRuntimeStatePatch(currentState, {
       ...currentRuntimeState,
       sso: buildDefaultRuntimeState().sso,
+      upload: buildDefaultRuntimeState().upload,
     });
   }
 
