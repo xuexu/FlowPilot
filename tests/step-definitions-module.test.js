@@ -33,7 +33,13 @@ test('step definitions module exposes ordered normal and Plus step metadata', ()
   const legacyPaymentSteps = api.getSteps({ plusModeEnabled: true, plusPaymentMethod: 'gopay' });
   const kiroSteps = api.getSteps({ activeFlowId: 'kiro' });
   const grokSteps = api.getSteps({ activeFlowId: 'grok' });
+  const grok2ApiSteps = api.getSteps({ activeFlowId: 'grok', targetId: 'grok2api' });
   const grokSub2ApiSteps = api.getSteps({ activeFlowId: 'grok', targetId: 'sub2api' });
+  const grokSub2ApiDualPublishSteps = api.getSteps({
+    activeFlowId: 'grok',
+    targetId: 'sub2api',
+    grokSub2apiGrok2ApiUploadEnabled: true,
+  });
   const grokAllSteps = api.getAllSteps({ activeFlowId: 'grok' });
 
   assert.equal(Array.isArray(steps), true);
@@ -259,18 +265,45 @@ test('step definitions module exposes ordered normal and Plus step metadata', ()
     ]
   );
   assert.deepStrictEqual(
-    grokSub2ApiSteps.map((step) => step.key),
+    grok2ApiSteps.map((step) => step.key),
     [
       'grok-open-signup-page',
       'grok-submit-email',
       'grok-submit-verification-code',
       'grok-submit-profile',
       'grok-extract-sso-cookie',
-      'grok-import-sso-to-sub2api',
+      'grok-upload-sso-to-grok2api',
     ]
   );
-  assert.equal(grokSub2ApiSteps[5].driverId, 'flows/grok/background/publisher-sub2api');
-  assert.equal(grokSub2ApiSteps[5].sourceId, 'grok-sub2api');
+  assert.equal(grok2ApiSteps[5].driverId, 'flows/grok/background/publisher-grok2api');
+  assert.equal(grok2ApiSteps[5].sourceId, 'grok-grok2api');
+  assert.deepStrictEqual(
+    grokSub2ApiSteps.map((step) => step.key),
+    [
+      'grok-open-signup-page',
+      'grok-submit-email',
+      'grok-submit-verification-code',
+      'grok-submit-profile',
+      'grok-start-sub2api-oauth',
+      'grok-complete-sub2api-oauth',
+    ]
+  );
+  assert.equal(grokSub2ApiSteps[4].driverId, 'flows/grok/background/sub2api-oauth-runner');
+  assert.equal(grokSub2ApiSteps[4].sourceId, 'grok-sub2api-oauth-page');
+  assert.deepStrictEqual(
+    grokSub2ApiDualPublishSteps.map((step) => step.key),
+    [
+      'grok-open-signup-page',
+      'grok-submit-email',
+      'grok-submit-verification-code',
+      'grok-submit-profile',
+      'grok-extract-sso-cookie',
+      'grok-upload-sso-to-grok2api',
+      'grok-start-sub2api-oauth',
+      'grok-complete-sub2api-oauth',
+    ]
+  );
+  assert.deepStrictEqual(grokSub2ApiDualPublishSteps.map((step) => step.id), [1, 2, 3, 4, 5, 6, 7, 8]);
   assert.deepStrictEqual(
     grokAllSteps.map((step) => step.key),
     [
@@ -280,7 +313,9 @@ test('step definitions module exposes ordered normal and Plus step metadata', ()
       'grok-submit-profile',
       'grok-extract-sso-cookie',
       'grok-upload-sso-to-webchat2api',
-      'grok-import-sso-to-sub2api',
+      'grok-upload-sso-to-grok2api',
+      'grok-start-sub2api-oauth',
+      'grok-complete-sub2api-oauth',
     ]
   );
   assert.deepStrictEqual(
@@ -289,8 +324,8 @@ test('step definitions module exposes ordered normal and Plus step metadata', ()
       ['grok-submit-email'],
       ['grok-submit-verification-code'],
       ['grok-submit-profile'],
-      ['grok-extract-sso-cookie'],
-      ['grok-import-sso-to-sub2api'],
+      ['grok-start-sub2api-oauth'],
+      ['grok-complete-sub2api-oauth'],
       [],
     ]
   );

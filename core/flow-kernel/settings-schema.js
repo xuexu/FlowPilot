@@ -377,16 +377,20 @@
           apiKey: String(targetState.apiKey ?? ''),
         };
       }
-      if (flowId === 'grok' && targetId === 'webchat2api') {
+      if (flowId === 'grok' && (targetId === 'webchat2api' || targetId === 'grok2api')) {
         return {
           ...targetState,
           baseUrl: String(targetState.baseUrl ?? '').trim(),
-          apiKey: String(targetState.apiKey ?? ''),
+          apiKey: String(targetState.apiKey ?? '').trim(),
         };
       }
       if (flowId === 'grok' && targetId === 'sub2api') {
+        const {
+          webchat2apiUploadEnabled: legacyWebchat2ApiUploadEnabled,
+          ...currentTargetState
+        } = targetState;
         return {
-          ...targetState,
+          ...currentTargetState,
           sub2apiUrl: String(targetState.sub2apiUrl ?? '').trim(),
           sub2apiEmail: String(targetState.sub2apiEmail ?? '').trim(),
           sub2apiPassword: String(targetState.sub2apiPassword ?? ''),
@@ -396,6 +400,10 @@
             : [],
           sub2apiAccountPriority: Math.max(1, Number(targetState.sub2apiAccountPriority) || 1),
           sub2apiDefaultProxyName: String(targetState.sub2apiDefaultProxyName ?? '').trim(),
+          grok2apiUploadEnabled: Boolean(
+            targetState.grok2apiUploadEnabled
+            ?? legacyWebchat2ApiUploadEnabled
+          ),
         };
       }
       return targetState;
@@ -649,6 +657,14 @@
         baseUrl: sharedWebchatConfig.baseUrl,
         apiKey: sharedWebchatConfig.apiKey,
       };
+      const grok2apiCurrent = isPlainObject(currentFlow.targets.grok2api)
+        ? currentFlow.targets.grok2api
+        : {};
+      const grok2apiSource = {
+        ...grok2apiCurrent,
+        baseUrl: input?.grok2ApiUrl ?? grok2apiCurrent.baseUrl,
+        apiKey: input?.grok2ApiAdminKey ?? grok2apiCurrent.apiKey,
+      };
       const sharedSub2ApiCredentials = resolveSharedSub2ApiCredentials(input, nested, openAiFlow, currentFlow);
       const sub2apiCurrent = isPlainObject(currentFlow.targets.sub2api)
         ? currentFlow.targets.sub2api
@@ -660,12 +676,17 @@
         sub2apiGroupNames: input?.grokSub2apiGroupNames ?? sub2apiCurrent.sub2apiGroupNames,
         sub2apiAccountPriority: input?.grokSub2apiAccountPriority ?? sub2apiCurrent.sub2apiAccountPriority,
         sub2apiDefaultProxyName: input?.grokSub2apiDefaultProxyName ?? sub2apiCurrent.sub2apiDefaultProxyName,
+        grok2apiUploadEnabled: input?.grokSub2apiGrok2ApiUploadEnabled
+          ?? input?.grokSub2apiWebchat2ApiUploadEnabled
+          ?? sub2apiCurrent.grok2apiUploadEnabled
+          ?? sub2apiCurrent.webchat2apiUploadEnabled,
       };
       return {
         ...currentFlow,
         targets: {
           ...currentFlow.targets,
           webchat2api: normalizeFlowTargetState('grok', 'webchat2api', targetSource, defaultGrokTargets.webchat2api || {}),
+          grok2api: normalizeFlowTargetState('grok', 'grok2api', grok2apiSource, defaultGrokTargets.grok2api || {}),
           sub2api: normalizeFlowTargetState('grok', 'sub2api', sub2apiSource, defaultGrokTargets.sub2api || {}),
         },
       };
@@ -859,10 +880,15 @@
       next.kiroRsKey = kiroState.targets['kiro-rs']?.apiKey || '';
       next.grokWebchat2ApiUrl = grokState.targets.webchat2api?.baseUrl || '';
       next.grokWebchat2ApiAdminKey = grokState.targets.webchat2api?.apiKey || '';
+      next.grok2ApiUrl = grokState.targets.grok2api?.baseUrl || '';
+      next.grok2ApiAdminKey = grokState.targets.grok2api?.apiKey || '';
       next.grokSub2apiGroupName = grokState.targets.sub2api?.sub2apiGroupName || '';
       next.grokSub2apiGroupNames = cloneValue(grokState.targets.sub2api?.sub2apiGroupNames || []);
       next.grokSub2apiAccountPriority = grokState.targets.sub2api?.sub2apiAccountPriority || 1;
       next.grokSub2apiDefaultProxyName = grokState.targets.sub2api?.sub2apiDefaultProxyName || '';
+      next.grokSub2apiGrok2ApiUploadEnabled = Boolean(
+        grokState.targets.sub2api?.grok2apiUploadEnabled
+      );
       next.stepExecutionRangeByFlow = buildStepExecutionRangeByFlow(normalizedState);
       next.settingsSchemaVersion = normalizedState.schemaVersion;
       next.settingsState = cloneValue(normalizedState);

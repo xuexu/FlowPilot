@@ -132,12 +132,16 @@ function resolveCurrentFlowCapabilities(state = {}, options = {}) {
     effectivePlusAccountAccessStrategy: effectiveStrategy,
     effectiveSignupMethod: 'email',
     stepDefinitionOptions: {
-      activeFlowId: 'openai',
+      activeFlowId: state.activeFlowId || 'openai',
       targetId: options.targetId,
       plusModeEnabled: Boolean(state.plusModeEnabled),
       plusPaymentMethod: normalizePlusPaymentMethod(state.plusPaymentMethod),
       plusAccountAccessStrategy: effectiveStrategy,
       signupMethod: 'email',
+      grokSub2apiGrok2ApiUploadEnabled: Boolean(
+        state.grokSub2apiGrok2ApiUploadEnabled
+        ?? state.settingsState?.flows?.grok?.targets?.sub2api?.grok2apiUploadEnabled
+      ),
     },
   };
 }
@@ -228,4 +232,27 @@ test('background step resolution falls back to OAuth tail when the requested ses
     'confirm-oauth',
     'platform-verify',
   ]);
+});
+
+test('background step resolution forwards the Grok SUB2API dual-publish option', () => {
+  const api = createHarness();
+  const resolvedState = api.buildResolvedStepDefinitionState({
+    activeFlowId: 'grok',
+    flowId: 'grok',
+    targetId: 'sub2api',
+    settingsState: {
+      flows: {
+        grok: {
+          targets: {
+            sub2api: {
+              grok2apiUploadEnabled: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  assert.equal(resolvedState.activeFlowId, 'grok');
+  assert.equal(resolvedState.grokSub2apiGrok2ApiUploadEnabled, true);
 });

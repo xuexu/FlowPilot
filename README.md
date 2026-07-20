@@ -53,7 +53,7 @@
   独立的 Builder ID 注册、桌面授权和 `kiro.rs` 上传链路，不复用 OpenAI 的 Plus 和平台接入逻辑。
 
 - `Grok`
-  独立的 xAI 注册和 SSO 提取链路，尾节点可选择上传到 `webchat2api`，或导入到 `SUB2API`。导入 `SUB2API` 时，本轮 Grok 注册邮箱会直接作为账号名称。
+  独立的 xAI 注册链路。选择 `webchat2api` 时提取并上传 SSO；选择 `grok2api` 时将 SSO 上传到固定的 `pool: auto` 账号池；选择 `SUB2API` 时使用 SUB2API 官方 OAuth 自动完成授权和账号创建，也可开启双发布，先上传到 `grok2api` 再继续 OAuth。Grok 注册邮箱固定作为创建到 `SUB2API` 的账号名称。
 
 ## Plus 模式
 

@@ -185,16 +185,16 @@ return {
         grok: {
           upload: {
             targetId: 'sub2api',
-            status: 'uploading',
+            status: 'creating',
             message: '',
-            targetUrl: 'https://sub.example.com/api/v1/admin/grok/sso-to-oauth',
+            targetUrl: 'https://sub.example.com/api/v1/admin/grok/oauth/create-from-oauth',
           },
         },
       },
     },
   });
-  assert.equal(api.displayGrokUploadStatus.textContent, '正在导入');
-  assert.equal(api.displayGrokUploadStatus.title, 'https://sub.example.com/api/v1/admin/grok/sso-to-oauth');
+  assert.equal(api.displayGrokUploadStatus.textContent, '正在创建');
+  assert.equal(api.displayGrokUploadStatus.title, 'https://sub.example.com/api/v1/admin/grok/oauth/create-from-oauth');
 });
 
 test('sidepanel project repository button resolves the configured target repositories', () => {
@@ -288,6 +288,7 @@ let currentPhoneSignupReloginAfterBindEmailEnabled = false;
 let currentStepDefinitionFlowId = 'openai';
 let currentStepDefinitionTargetId = 'cpa';
 let currentStepDefinitionOpenAiWebchatUploadEnabled = false;
+let currentStepDefinitionGrokSub2apiGrok2ApiUploadEnabled = false;
 const DEFAULT_ACTIVE_FLOW_ID = 'openai';
 const DEFAULT_SIGNUP_METHOD = 'email';
 const DEFAULT_PLUS_PAYMENT_METHOD = 'paypal';
@@ -329,6 +330,7 @@ return {
       plusPaymentMethod: 'paypal',
       plusAccountAccessStrategy: 'oauth',
       openaiWebchatUploadEnabled: false,
+      grokSub2apiGrok2ApiUploadEnabled: false,
       settingsState: undefined,
       signupMethod: 'email',
       phoneVerificationEnabled: false,
@@ -370,6 +372,7 @@ let currentPhoneSignupReloginAfterBindEmailEnabled = false;
 let currentStepDefinitionFlowId = 'openai';
 let currentStepDefinitionTargetId = 'cpa';
 let currentStepDefinitionOpenAiWebchatUploadEnabled = false;
+let currentStepDefinitionGrokSub2apiGrok2ApiUploadEnabled = false;
 const DEFAULT_ACTIVE_FLOW_ID = 'openai';
 const DEFAULT_SIGNUP_METHOD = 'email';
 const DEFAULT_PLUS_PAYMENT_METHOD = 'paypal';
@@ -407,6 +410,74 @@ return {
   assert.equal(api.calls.at(-1).type, 'render');
   assert.equal(api.calls.at(-2).options.targetId, 'webchat');
   assert.equal(api.calls.at(-2).options.openaiWebchatUploadEnabled, true);
+});
+
+test('sidepanel step definitions rerender when Grok SUB2API dual publishing changes', () => {
+  const bundle = [
+    extractFunction(sidepanelSource, 'normalizeSignupMethod'),
+    extractFunction(sidepanelSource, 'normalizePlusPaymentMethod'),
+    extractFunction(sidepanelSource, 'getStepDefinitionsForMode'),
+    extractFunction(sidepanelSource, 'rebuildStepDefinitionState'),
+    extractFunction(sidepanelSource, 'syncStepDefinitionsForMode'),
+  ].join('\n');
+
+  const api = new Function(`
+const calls = [];
+const window = {
+  MultiPageStepDefinitions: {
+    getSteps(options) {
+      calls.push({ type: 'getSteps', options });
+      return Array.from(
+        { length: options.grokSub2apiGrok2ApiUploadEnabled ? 8 : 6 },
+        (_, index) => ({ id: index + 1, order: index + 1, key: 'grok-' + (index + 1) })
+      );
+    },
+  },
+};
+let latestState = { activeFlowId: 'grok', targetId: 'sub2api' };
+let currentPlusModeEnabled = false;
+let currentPlusPaymentMethod = 'paypal';
+let currentPlusAccountAccessStrategy = 'oauth';
+let currentSignupMethod = 'email';
+let currentPhoneVerificationEnabled = false;
+let currentPhoneSignupReloginAfterBindEmailEnabled = false;
+let currentStepDefinitionFlowId = 'grok';
+let currentStepDefinitionTargetId = 'sub2api';
+let currentStepDefinitionOpenAiWebchatUploadEnabled = false;
+let currentStepDefinitionGrokSub2apiGrok2ApiUploadEnabled = false;
+const DEFAULT_ACTIVE_FLOW_ID = 'openai';
+const DEFAULT_SIGNUP_METHOD = 'email';
+const DEFAULT_PLUS_PAYMENT_METHOD = 'paypal';
+const DEFAULT_PLUS_ACCOUNT_ACCESS_STRATEGY = 'oauth';
+let stepDefinitions = Array.from({ length: 6 }, (_, index) => ({ id: index + 1, key: 'grok-' + (index + 1) }));
+let STEP_IDS = stepDefinitions.map((step) => step.id);
+let STEP_DEFAULT_STATUSES = Object.fromEntries(STEP_IDS.map((stepId) => [stepId, 'pending']));
+let SKIPPABLE_STEPS = new Set(STEP_IDS);
+function renderStepsList() {
+  calls.push({ type: 'render', stepIds: [...STEP_IDS] });
+}
+function normalizePlusAccountAccessStrategy(value = '') {
+  return String(value || DEFAULT_PLUS_ACCOUNT_ACCESS_STRATEGY).trim().toLowerCase() || DEFAULT_PLUS_ACCOUNT_ACCESS_STRATEGY;
+}
+${bundle}
+return {
+  calls,
+  syncStepDefinitionsForMode,
+  getStepIds: () => [...STEP_IDS],
+};
+`)();
+
+  api.syncStepDefinitionsForMode(false, {
+    activeFlowId: 'grok',
+    targetId: 'sub2api',
+    plusPaymentMethod: 'paypal',
+    grokSub2apiGrok2ApiUploadEnabled: true,
+    signupMethod: 'email',
+  });
+
+  assert.deepEqual(api.getStepIds(), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.equal(api.calls.at(-2).options.grokSub2apiGrok2ApiUploadEnabled, true);
+  assert.equal(api.calls.at(-1).type, 'render');
 });
 
 test('sidepanel OpenAI target normalization keeps registry-backed webchat source', () => {

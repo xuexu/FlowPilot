@@ -88,6 +88,29 @@ test('tab runtime accepts canonical openai-auth readiness for queued openai-auth
   assert.deepEqual(Object.keys(currentState.tabRegistry), ['openai-auth']);
 });
 
+test('tab runtime unregisters only the expected source tab', async () => {
+  const runtimeSource = fs.readFileSync('core/flow-kernel/tab-runtime.js', 'utf8');
+  const runtimeApi = new Function('self', `${runtimeSource}; return self.MultiPageBackgroundTabRuntime;`)({});
+  let currentState = {
+    tabRegistry: {
+      'grok-sub2api-oauth-page': { tabId: 72, ready: true },
+    },
+  };
+  const runtime = runtimeApi.createTabRuntime({
+    LOG_PREFIX: '[test]',
+    addLog: async () => {},
+    chrome: { tabs: {} },
+    getState: async () => currentState,
+    setState: async (updates) => { currentState = { ...currentState, ...updates }; },
+    throwIfStopped: () => {},
+  });
+
+  assert.equal(await runtime.unregisterTab('grok-sub2api-oauth-page', 99), false);
+  assert.equal(currentState.tabRegistry['grok-sub2api-oauth-page'].tabId, 72);
+  assert.equal(await runtime.unregisterTab('grok-sub2api-oauth-page', 72), true);
+  assert.equal(currentState.tabRegistry['grok-sub2api-oauth-page'], null);
+});
+
 test('tab runtime caps per-attempt response timeout to the remaining resilient timeout budget', () => {
   const source = fs.readFileSync('core/flow-kernel/tab-runtime.js', 'utf8');
   const globalScope = {};

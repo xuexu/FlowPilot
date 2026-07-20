@@ -249,6 +249,20 @@
       console.log(LOG_PREFIX, `Tab registered: ${source} -> ${tabId}`);
     }
 
+    async function unregisterTab(source, expectedTabId = null) {
+      let registry = await getTabRegistry();
+      const entry = getSourceMapValue(registry, source);
+      if (!entry) {
+        return false;
+      }
+      if (Number.isInteger(expectedTabId) && entry.tabId !== expectedTabId) {
+        return false;
+      }
+      registry = setSourceMapValue(registry, source, null);
+      await setState({ tabRegistry: registry });
+      return true;
+    }
+
     async function isTabAlive(source) {
       let registry = await getTabRegistry();
       const entry = getSourceMapValue(registry, source);
@@ -1040,6 +1054,7 @@
       queueCommand,
       queryTabsInAutomationWindow,
       registerTab,
+      unregisterTab,
       rememberSourceLastUrl,
       resolveResponseTimeoutMs,
       reuseOrCreateTab,

@@ -125,6 +125,8 @@ const rowGrokSub2ApiAccountPriority = document.getElementById('row-grok-sub2api-
 const inputGrokSub2ApiAccountPriority = document.getElementById('input-grok-sub2api-account-priority');
 const rowGrokSub2ApiDefaultProxy = document.getElementById('row-grok-sub2api-default-proxy');
 const inputGrokSub2ApiDefaultProxy = document.getElementById('input-grok-sub2api-default-proxy');
+const rowGrokSub2ApiGrok2ApiUpload = document.getElementById('row-grok-sub2api-grok2api-upload');
+const inputGrokSub2ApiGrok2ApiUploadEnabled = document.getElementById('input-grok-sub2api-grok2api-upload-enabled');
 const rowIpProxyEnabled = document.getElementById('row-ip-proxy-enabled');
 const inputIpProxyEnabled = document.getElementById('input-ip-proxy-enabled');
 const btnToggleIpProxySection = document.getElementById('btn-toggle-ip-proxy-section');
@@ -200,6 +202,10 @@ const rowGrokWebchat2ApiUrl = document.getElementById('row-grok-webchat2api-url'
 const inputGrokWebchat2ApiUrl = document.getElementById('input-grok-webchat2api-url');
 const rowGrokWebchat2ApiKey = document.getElementById('row-grok-webchat2api-key');
 const inputGrokWebchat2ApiKey = document.getElementById('input-grok-webchat2api-key');
+const rowGrok2ApiUrl = document.getElementById('row-grok2api-url');
+const inputGrok2ApiUrl = document.getElementById('input-grok2api-url');
+const rowGrok2ApiKey = document.getElementById('row-grok2api-key');
+const inputGrok2ApiKey = document.getElementById('input-grok2api-key');
 const rowOpenAiWebchatUrl = document.getElementById('row-openai-webchat-url');
 const inputOpenAiWebchatUrl = document.getElementById('input-openai-webchat-url');
 const rowOpenAiWebchatKey = document.getElementById('row-openai-webchat-key');
@@ -631,6 +637,7 @@ let currentPhoneSignupReloginAfterBindEmailEnabled = DEFAULT_PHONE_SIGNUP_RELOGI
 let currentStepDefinitionFlowId = DEFAULT_ACTIVE_FLOW_ID;
 let currentStepDefinitionTargetId = '';
 let currentStepDefinitionOpenAiWebchatUploadEnabled = false;
+let currentStepDefinitionGrokSub2apiGrok2ApiUploadEnabled = false;
 let phoneSignupReuseUiWasLocked = false;
 let kiroRsConnectionTestStatusText = '未测试';
 let lastPhoneSmsProviderBeforeChange = null;
@@ -1149,6 +1156,15 @@ function getStepDefinitionsForMode(plusModeEnabled = false, options = {}) {
   const openaiWebchatUploadEnabled = typeof options === 'string'
     ? Boolean(typeof latestState !== 'undefined' ? latestState?.openaiWebchatUploadEnabled : false)
     : Boolean(options.openaiWebchatUploadEnabled ?? (typeof latestState !== 'undefined' ? latestState?.openaiWebchatUploadEnabled : false));
+  const grokSub2apiGrok2ApiUploadEnabled = typeof options === 'string'
+    ? Boolean(typeof latestState !== 'undefined' ? (
+      latestState?.grokSub2apiGrok2ApiUploadEnabled
+      ?? latestState?.settingsState?.flows?.grok?.targets?.sub2api?.grok2apiUploadEnabled
+    ) : false)
+    : Boolean(options.grokSub2apiGrok2ApiUploadEnabled ?? (typeof latestState !== 'undefined' ? (
+      latestState?.grokSub2apiGrok2ApiUploadEnabled
+      ?? latestState?.settingsState?.flows?.grok?.targets?.sub2api?.grok2apiUploadEnabled
+    ) : false));
   const settingsState = typeof options === 'string'
     ? (typeof latestState !== 'undefined' ? latestState?.settingsState : undefined)
     : (options.settingsState || (typeof latestState !== 'undefined' ? latestState?.settingsState : undefined));
@@ -1159,6 +1175,7 @@ function getStepDefinitionsForMode(plusModeEnabled = false, options = {}) {
     plusPaymentMethod: normalizePlusPaymentMethod(rawPaymentMethod),
     plusAccountAccessStrategy: normalizePlusAccountAccessStrategy(rawPlusAccountAccessStrategy),
     openaiWebchatUploadEnabled,
+    grokSub2apiGrok2ApiUploadEnabled,
     settingsState,
     signupMethod: normalizeSignupMethod(rawSignupMethod),
     phoneVerificationEnabled,
@@ -1208,6 +1225,15 @@ function getWorkflowNodesForMode(plusModeEnabled = false, options = {}) {
   const openaiWebchatUploadEnabled = typeof options === 'string'
     ? Boolean(typeof latestState !== 'undefined' ? latestState?.openaiWebchatUploadEnabled : false)
     : Boolean(options.openaiWebchatUploadEnabled ?? (typeof latestState !== 'undefined' ? latestState?.openaiWebchatUploadEnabled : false));
+  const grokSub2apiGrok2ApiUploadEnabled = typeof options === 'string'
+    ? Boolean(typeof latestState !== 'undefined' ? (
+      latestState?.grokSub2apiGrok2ApiUploadEnabled
+      ?? latestState?.settingsState?.flows?.grok?.targets?.sub2api?.grok2apiUploadEnabled
+    ) : false)
+    : Boolean(options.grokSub2apiGrok2ApiUploadEnabled ?? (typeof latestState !== 'undefined' ? (
+      latestState?.grokSub2apiGrok2ApiUploadEnabled
+      ?? latestState?.settingsState?.flows?.grok?.targets?.sub2api?.grok2apiUploadEnabled
+    ) : false));
   const settingsState = typeof options === 'string'
     ? (typeof latestState !== 'undefined' ? latestState?.settingsState : undefined)
     : (options.settingsState || (typeof latestState !== 'undefined' ? latestState?.settingsState : undefined));
@@ -1218,6 +1244,7 @@ function getWorkflowNodesForMode(plusModeEnabled = false, options = {}) {
     plusPaymentMethod: normalizePlusPaymentMethod(rawPaymentMethod),
     plusAccountAccessStrategy: normalizePlusAccountAccessStrategy(rawPlusAccountAccessStrategy),
     openaiWebchatUploadEnabled,
+    grokSub2apiGrok2ApiUploadEnabled,
     settingsState,
     signupMethod: normalizeSignupMethod(rawSignupMethod),
     phoneVerificationEnabled,
@@ -1306,6 +1333,13 @@ function rebuildStepDefinitionState(plusModeEnabled = false, options = {}) {
     options.openaiWebchatUploadEnabled
     ?? (typeof latestState !== 'undefined' ? latestState?.openaiWebchatUploadEnabled : false)
   );
+  const grokSub2apiGrok2ApiUploadEnabled = Boolean(
+    options.grokSub2apiGrok2ApiUploadEnabled
+    ?? (typeof latestState !== 'undefined' ? (
+      latestState?.grokSub2apiGrok2ApiUploadEnabled
+      ?? latestState?.settingsState?.flows?.grok?.targets?.sub2api?.grok2apiUploadEnabled
+    ) : false)
+  );
   const settingsState = options.settingsState || (typeof latestState !== 'undefined' ? latestState?.settingsState : undefined);
   currentPlusPaymentMethod = normalizePlusPaymentMethod(rawPaymentMethod);
   currentPlusAccountAccessStrategy = normalizePlusAccountAccessStrategy(rawPlusAccountAccessStrategy);
@@ -1326,12 +1360,16 @@ function rebuildStepDefinitionState(plusModeEnabled = false, options = {}) {
   if (typeof currentStepDefinitionOpenAiWebchatUploadEnabled !== 'undefined') {
     currentStepDefinitionOpenAiWebchatUploadEnabled = Boolean(openaiWebchatUploadEnabled);
   }
+  if (typeof currentStepDefinitionGrokSub2apiGrok2ApiUploadEnabled !== 'undefined') {
+    currentStepDefinitionGrokSub2apiGrok2ApiUploadEnabled = Boolean(grokSub2apiGrok2ApiUploadEnabled);
+  }
   stepDefinitions = getStepDefinitionsForMode(currentPlusModeEnabled, {
     activeFlowId: nextActiveFlowId,
     targetId,
     plusPaymentMethod: currentPlusPaymentMethod,
     plusAccountAccessStrategy: currentPlusAccountAccessStrategy,
     openaiWebchatUploadEnabled,
+    grokSub2apiGrok2ApiUploadEnabled,
     settingsState,
     signupMethod: currentSignupMethod,
     phoneVerificationEnabled,
@@ -1345,6 +1383,7 @@ function rebuildStepDefinitionState(plusModeEnabled = false, options = {}) {
       plusPaymentMethod: currentPlusPaymentMethod,
       plusAccountAccessStrategy: currentPlusAccountAccessStrategy,
       openaiWebchatUploadEnabled,
+      grokSub2apiGrok2ApiUploadEnabled,
       settingsState,
       signupMethod: currentSignupMethod,
       phoneVerificationEnabled,
@@ -1934,6 +1973,7 @@ const TARGET_REPOSITORY_URLS = Object.freeze({
   }),
   grok: Object.freeze({
     webchat2api: 'https://github.com/zqbxdev/webchat2api',
+    grok2api: 'https://github.com/jiujiu532/grok2api',
     sub2api: 'https://github.com/Wei-Shaw/sub2api',
   }),
 });
@@ -1948,6 +1988,7 @@ const PRIVACY_MASKED_INPUT_IDS = Object.freeze([
   'input-openai-chatgpt2api-url',
   'input-kiro-rs-url',
   'input-grok-webchat2api-url',
+  'input-grok2api-url',
   'input-email-prefix',
   'input-inbucket-host',
   'input-inbucket-mailbox',
@@ -2913,12 +2954,18 @@ function getGrokUploadStatusLabel(value = '', targetId = '') {
   switch (normalized) {
     case 'reading_session':
       return '正在读取会话';
+    case 'waiting_authorization':
+      return '等待授权';
+    case 'authorizing':
+      return '正在授权';
+    case 'creating':
+      return '正在创建';
     case 'uploading':
-      return isSub2Api ? '正在导入' : '正在上传';
+      return isSub2Api ? '正在创建' : '正在上传';
     case 'uploaded':
-      return isSub2Api ? '已导入' : '已上传';
+      return isSub2Api ? '已创建' : '已上传';
     case 'error':
-      return isSub2Api ? '导入失败' : '上传失败';
+      return isSub2Api ? '创建失败' : '上传失败';
     default:
       return String(value || '').trim() || '未开始';
   }
@@ -5328,6 +5375,20 @@ function collectSettingsPayload() {
   const currentGrokWebchat2ApiKeyValue = typeof inputGrokWebchat2ApiKey !== 'undefined' && inputGrokWebchat2ApiKey
     ? String(inputGrokWebchat2ApiKey.value ?? '').trim()
     : '';
+  const currentGrok2ApiUrlValue = typeof inputGrok2ApiUrl !== 'undefined' && inputGrok2ApiUrl
+    ? String(inputGrok2ApiUrl.value ?? '').trim()
+    : String(
+      latestState?.grok2ApiUrl
+      || latestState?.settingsState?.flows?.grok?.targets?.grok2api?.baseUrl
+      || ''
+    ).trim();
+  const currentGrok2ApiKeyValue = typeof inputGrok2ApiKey !== 'undefined' && inputGrok2ApiKey
+    ? String(inputGrok2ApiKey.value ?? '').trim()
+    : String(
+      latestState?.grok2ApiAdminKey
+      || latestState?.settingsState?.flows?.grok?.targets?.grok2api?.apiKey
+      || ''
+    ).trim();
   const readSharedWebchatUrlFromState = typeof getSharedWebchatUrlFromState === 'function'
     ? getSharedWebchatUrlFromState
     : ((state = {}) => String(
@@ -5389,6 +5450,8 @@ function collectSettingsPayload() {
       ? currentKiroRsKeyValue
       : String(latestState?.kiroRsKey || '').trim(),
     ...createSharedWebchatConfigPatch(sharedWebchatUrl, sharedWebchatAdminKey),
+    grok2ApiUrl: currentGrok2ApiUrlValue,
+    grok2ApiAdminKey: currentGrok2ApiKeyValue,
     openaiWebchatUploadEnabled: openAiWebchatUploadEnabled,
     ...createOpenAiChatgpt2ApiConfigPatch(currentOpenAiChatgpt2ApiUrlValue, currentOpenAiChatgpt2ApiKeyValue),
     vpsUrl: inputVpsUrl.value.trim(),
@@ -5413,6 +5476,10 @@ function collectSettingsPayload() {
         : latestState?.grokSub2apiAccountPriority
     ),
     grokSub2apiDefaultProxyName,
+    grokSub2apiGrok2ApiUploadEnabled: Boolean(
+      typeof inputGrokSub2ApiGrok2ApiUploadEnabled !== 'undefined'
+      && inputGrokSub2ApiGrok2ApiUploadEnabled?.checked
+    ),
     ipProxyEnabled: getSelectedIpProxyEnabledSafe(),
     ipProxyService: selectedIpProxyService,
     ipProxyMode: currentIpProxyServiceProfile.mode,
@@ -10551,6 +10618,12 @@ function resolveStepDefinitionCapabilityState(state = latestState, options = {})
     openaiWebchatUploadEnabled: capabilityState
       ? Boolean(capabilityState.stepDefinitionOptions?.openaiWebchatUploadEnabled)
       : false,
+    grokSub2apiGrok2ApiUploadEnabled: capabilityState
+      ? Boolean(capabilityState.stepDefinitionOptions?.grokSub2apiGrok2ApiUploadEnabled)
+      : Boolean(
+        nextState?.grokSub2apiGrok2ApiUploadEnabled
+        ?? nextState?.settingsState?.flows?.grok?.targets?.sub2api?.grok2apiUploadEnabled
+      ),
   };
 }
 
@@ -11830,6 +11903,13 @@ function syncStepDefinitionsForMode(plusModeEnabled = false, plusPaymentMethodOr
     options.openaiWebchatUploadEnabled
       ?? (typeof latestState !== 'undefined' ? latestState?.openaiWebchatUploadEnabled : false)
   );
+  const nextGrokSub2apiGrok2ApiUploadEnabled = Boolean(
+    options.grokSub2apiGrok2ApiUploadEnabled
+      ?? (typeof latestState !== 'undefined' ? (
+        latestState?.grokSub2apiGrok2ApiUploadEnabled
+        ?? latestState?.settingsState?.flows?.grok?.targets?.sub2api?.grok2apiUploadEnabled
+      ) : false)
+  );
   const nextSettingsState = options.settingsState || (typeof latestState !== 'undefined' ? latestState?.settingsState : null);
   const nextPaymentMethod = normalizePlusPaymentMethod(rawPaymentMethod);
   const nextActiveFlowId = String(
@@ -11847,6 +11927,9 @@ function syncStepDefinitionsForMode(plusModeEnabled = false, plusPaymentMethodOr
   const currentOpenaiWebchatUploadEnabled = typeof currentStepDefinitionOpenAiWebchatUploadEnabled !== 'undefined'
     ? Boolean(currentStepDefinitionOpenAiWebchatUploadEnabled)
     : Boolean(typeof latestState !== 'undefined' ? latestState?.openaiWebchatUploadEnabled : false);
+  const currentGrokSub2apiGrok2ApiUploadEnabled = typeof currentStepDefinitionGrokSub2apiGrok2ApiUploadEnabled !== 'undefined'
+    ? Boolean(currentStepDefinitionGrokSub2apiGrok2ApiUploadEnabled)
+    : Boolean(typeof latestState !== 'undefined' ? latestState?.grokSub2apiGrok2ApiUploadEnabled : false);
   const rootScope = typeof window !== 'undefined' ? window : globalThis;
   const currentPaymentStep = stepDefinitions.find((step) => step.key === 'paypal-approve');
   const nextPaymentTitle = rootScope.MultiPageStepDefinitions?.getPlusPaymentStepTitle?.({
@@ -11856,6 +11939,7 @@ function syncStepDefinitionsForMode(plusModeEnabled = false, plusPaymentMethodOr
     plusPaymentMethod: nextPaymentMethod,
     plusAccountAccessStrategy: nextPlusAccountAccessStrategy,
     openaiWebchatUploadEnabled: nextOpenaiWebchatUploadEnabled,
+    grokSub2apiGrok2ApiUploadEnabled: nextGrokSub2apiGrok2ApiUploadEnabled,
     settingsState: nextSettingsState,
     signupMethod: nextSignupMethod,
     phoneVerificationEnabled: nextPhoneVerificationEnabled,
@@ -11871,6 +11955,7 @@ function syncStepDefinitionsForMode(plusModeEnabled = false, plusPaymentMethodOr
     || nextPhoneSignupReloginAfterBindEmailEnabled !== currentPhoneSignupReloginAfterBindEmailEnabled
     || nextAccountContributionEnabled !== Boolean(typeof latestState !== 'undefined' ? latestState?.accountContributionEnabled : false)
     || nextOpenaiWebchatUploadEnabled !== currentOpenaiWebchatUploadEnabled
+    || nextGrokSub2apiGrok2ApiUploadEnabled !== currentGrokSub2apiGrok2ApiUploadEnabled
     || nextActiveFlowId !== currentFlowId
     || normalizedNextTargetId !== currentTargetId
     || paymentTitleChanged;
@@ -11884,6 +11969,7 @@ function syncStepDefinitionsForMode(plusModeEnabled = false, plusPaymentMethodOr
     plusPaymentMethod: nextPaymentMethod,
     plusAccountAccessStrategy: nextPlusAccountAccessStrategy,
     openaiWebchatUploadEnabled: nextOpenaiWebchatUploadEnabled,
+    grokSub2apiGrok2ApiUploadEnabled: nextGrokSub2apiGrok2ApiUploadEnabled,
     settingsState: nextSettingsState,
     signupMethod: nextSignupMethod,
     phoneVerificationEnabled: nextPhoneVerificationEnabled,
@@ -11915,6 +12001,7 @@ function syncStepDefinitionsFromUiState(stateOverrides = {}) {
     plusPaymentMethod: getSelectedPlusPaymentMethod(nextState),
     plusAccountAccessStrategy: stepDefinitionState.plusAccountAccessStrategy,
     openaiWebchatUploadEnabled: stepDefinitionState.openaiWebchatUploadEnabled,
+    grokSub2apiGrok2ApiUploadEnabled: stepDefinitionState.grokSub2apiGrok2ApiUploadEnabled,
     settingsState: nextState?.settingsState,
     signupMethod: stepDefinitionState.signupMethod,
     phoneVerificationEnabled: Boolean(stepDefinitionState.phoneVerificationEnabled),
@@ -11945,6 +12032,7 @@ function applySettingsState(state) {
       signupMethod: stepDefinitionState.signupMethod,
       plusAccountAccessStrategy: stepDefinitionState.plusAccountAccessStrategy,
       openaiWebchatUploadEnabled: stepDefinitionState.openaiWebchatUploadEnabled,
+      grokSub2apiGrok2ApiUploadEnabled: stepDefinitionState.grokSub2apiGrok2ApiUploadEnabled,
       settingsState: state?.settingsState,
       phoneVerificationEnabled: Boolean(stepDefinitionState.phoneVerificationEnabled),
       phoneSignupReloginAfterBindEmailEnabled: Boolean(state?.phoneSignupReloginAfterBindEmailEnabled),
@@ -12064,6 +12152,9 @@ function applySettingsState(state) {
   if (typeof inputGrokSub2ApiDefaultProxy !== 'undefined' && inputGrokSub2ApiDefaultProxy) {
     inputGrokSub2ApiDefaultProxy.value = state?.grokSub2apiDefaultProxyName || '';
   }
+  if (typeof inputGrokSub2ApiGrok2ApiUploadEnabled !== 'undefined' && inputGrokSub2ApiGrok2ApiUploadEnabled) {
+    inputGrokSub2ApiGrok2ApiUploadEnabled.checked = Boolean(state?.grokSub2apiGrok2ApiUploadEnabled);
+  }
   if (typeof inputKiroRsUrl !== 'undefined' && inputKiroRsUrl) {
     inputKiroRsUrl.value = String(state?.kiroRsUrl || '').trim();
   }
@@ -12075,6 +12166,20 @@ function applySettingsState(state) {
   }
   if (typeof inputGrokWebchat2ApiKey !== 'undefined' && inputGrokWebchat2ApiKey) {
     inputGrokWebchat2ApiKey.value = String(getSharedWebchatAdminKeyFromState(state) || '');
+  }
+  if (typeof inputGrok2ApiUrl !== 'undefined' && inputGrok2ApiUrl) {
+    inputGrok2ApiUrl.value = String(
+      state?.grok2ApiUrl
+      || state?.settingsState?.flows?.grok?.targets?.grok2api?.baseUrl
+      || ''
+    ).trim();
+  }
+  if (typeof inputGrok2ApiKey !== 'undefined' && inputGrok2ApiKey) {
+    inputGrok2ApiKey.value = String(
+      state?.grok2ApiAdminKey
+      || state?.settingsState?.flows?.grok?.targets?.grok2api?.apiKey
+      || ''
+    );
   }
   if (typeof inputOpenAiWebchatUrl !== 'undefined' && inputOpenAiWebchatUrl) {
     inputOpenAiWebchatUrl.value = String(getSharedWebchatUrlFromState(state) || '').trim();
@@ -14601,6 +14706,9 @@ function updatePanelModeUI() {
   if (typeof applyFlowSettingsGroupVisibility === 'function') {
     applyFlowSettingsGroupVisibility(visibleGroupIds);
   }
+  if (typeof updateGrokSub2ApiGrok2ApiUploadUi === 'function') {
+    updateGrokSub2ApiGrok2ApiUploadUi(activeFlowId, effectiveTargetId);
+  }
   if (typeof updatePlusModeUI === 'function') {
     updatePlusModeUI();
   }
@@ -14626,6 +14734,37 @@ function updatePanelModeUI() {
       ? 'SUB2API 回调验证'
       : (useCodex2Api ? 'Codex2API 回调验证' : 'CPA 回调验证');
   }
+}
+
+function updateGrokSub2ApiGrok2ApiUploadUi(activeFlowId = '', targetId = '') {
+  const normalizedFlowId = String(activeFlowId || '').trim().toLowerCase();
+  const normalizedTargetId = String(targetId || '').trim().toLowerCase();
+  const isGrok = normalizedFlowId === 'grok';
+  const isSub2Api = isGrok && normalizedTargetId === 'sub2api';
+  const enabled = Boolean(inputGrokSub2ApiGrok2ApiUploadEnabled?.checked);
+  const showGrok2ApiControls = isGrok && (
+    normalizedTargetId === 'grok2api'
+    || (isSub2Api && enabled)
+  );
+  const showSsoControls = isGrok && (
+    normalizedTargetId === 'webchat2api'
+    || normalizedTargetId === 'grok2api'
+    || (isSub2Api && enabled)
+  );
+
+  if (rowGrokSub2ApiGrok2ApiUpload) {
+    rowGrokSub2ApiGrok2ApiUpload.style.display = isSub2Api ? '' : 'none';
+  }
+  [rowGrok2ApiUrl, rowGrok2ApiKey].forEach((row) => {
+    if (row) {
+      row.style.display = showGrok2ApiControls ? '' : 'none';
+    }
+  });
+  [rowGrokSsoStatus, rowGrokSsoSettings].forEach((row) => {
+    if (row) {
+      row.style.display = showSsoControls ? '' : 'none';
+    }
+  });
 }
 
 // ============================================================
@@ -16853,6 +16992,20 @@ selectPlusAccountAccessStrategy?.addEventListener('change', () => {
   });
 });
 
+[inputGrok2ApiUrl, inputGrok2ApiKey].forEach((input) => {
+  input?.addEventListener('input', () => {
+    syncLatestState({
+      grok2ApiUrl: String(inputGrok2ApiUrl?.value || '').trim(),
+      grok2ApiAdminKey: String(inputGrok2ApiKey?.value || '').trim(),
+    });
+    markSettingsDirty(true);
+    scheduleSettingsAutoSave();
+  });
+  input?.addEventListener('blur', () => {
+    saveSettings({ silent: true }).catch(() => { });
+  });
+});
+
 [inputOpenAiWebchatUrl, inputOpenAiWebchatKey].forEach((input) => {
   input?.addEventListener('input', () => {
     syncLatestState(buildSharedWebchatConfigPatch(
@@ -17298,6 +17451,22 @@ inputGrokSub2ApiDefaultProxy.addEventListener('input', () => {
   scheduleSettingsAutoSave();
 });
 inputGrokSub2ApiDefaultProxy.addEventListener('blur', () => {
+  saveSettings({ silent: true }).catch(() => { });
+});
+
+inputGrokSub2ApiGrok2ApiUploadEnabled?.addEventListener('change', () => {
+  const enabled = Boolean(inputGrokSub2ApiGrok2ApiUploadEnabled.checked);
+  syncLatestState({ grokSub2apiGrok2ApiUploadEnabled: enabled });
+  updateGrokSub2ApiGrok2ApiUploadUi(
+    typeof getSelectedFlowId === 'function' ? getSelectedFlowId(latestState) : latestState?.activeFlowId,
+    typeof getSelectedTargetId === 'function' ? getSelectedTargetId('grok') : latestState?.targetId
+  );
+  syncStepDefinitionsFromUiState({
+    grokSub2apiGrok2ApiUploadEnabled: enabled,
+  });
+  renderStepStatuses(latestState);
+  updateButtonStates();
+  markSettingsDirty(true);
   saveSettings({ silent: true }).catch(() => { });
 });
 

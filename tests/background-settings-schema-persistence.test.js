@@ -19,6 +19,10 @@ test('background persistable defaults include empty Grok SUB2API group policy fi
   assert.match(defaultsBlock, /grokSub2apiGroupNames:\s*\[\],/);
   assert.match(defaultsBlock, /grokSub2apiAccountPriority:\s*DEFAULT_SUB2API_ACCOUNT_PRIORITY,/);
   assert.match(defaultsBlock, /grokSub2apiDefaultProxyName:\s*'',/);
+  assert.match(defaultsBlock, /grok2ApiUrl:\s*'',/);
+  assert.match(defaultsBlock, /grok2ApiAdminKey:\s*'',/);
+  assert.match(defaultsBlock, /grokSub2apiGrok2ApiUploadEnabled:\s*false,/);
+  assert.doesNotMatch(defaultsBlock, /grokSub2apiWebchat2ApiUploadEnabled:/);
 });
 
 function extractFunction(name) {
@@ -98,6 +102,9 @@ const SETTINGS_SCHEMA_VIEW_KEYS = Object.freeze([
   'grokSub2apiGroupNames',
   'grokSub2apiAccountPriority',
   'grokSub2apiDefaultProxyName',
+  'grok2ApiUrl',
+  'grok2ApiAdminKey',
+  'grokSub2apiGrok2ApiUploadEnabled',
   'codex2apiUrl',
   'codex2apiAdminKey',
   'customPassword',
@@ -142,6 +149,9 @@ const PERSISTED_SETTING_DEFAULTS = {
   ipProxyMode: 'account',
   kiroRsUrl: '',
   kiroRsKey: '',
+  grok2ApiUrl: '',
+  grok2ApiAdminKey: '',
+  grokSub2apiGrok2ApiUploadEnabled: false,
   openaiWebchatUrl: '',
   openaiWebchatAdminKey: '',
   openaiWebchatUploadEnabled: false,
@@ -174,6 +184,7 @@ const PERSISTED_SETTING_KEYS = Object.keys(PERSISTED_SETTING_DEFAULTS);
 const PERSISTED_SETTINGS_SCHEMA_KEYS = ['settingsSchemaVersion', 'settingsState'];
 const LEGACY_AUTO_STEP_DELAY_KEYS = [];
 const LEGACY_VERIFICATION_RESEND_COUNT_KEYS = [];
+const LEGACY_GROK_SUB2API_UPLOAD_KEYS = ['grokSub2apiWebchat2ApiUploadEnabled'];
 const PLUS_ACCOUNT_ACCESS_STRATEGY_OAUTH = 'oauth';
 const PLUS_ACCOUNT_ACCESS_STRATEGY_SUB2API_CODEX_SESSION = 'sub2api_codex_session';
 const PLUS_ACCOUNT_ACCESS_STRATEGY_CPA_CODEX_SESSION = 'cpa_codex_session';
@@ -490,6 +501,31 @@ function getRequestedKeys() {
   assert.equal(state.settingsState.activeFlowId, 'openai');
   assert.ok(api.getRequestedKeys().includes('madaoBaseUrl'));
   assert.ok(api.getRequestedKeys().includes('madaoMode'));
+  assert.ok(api.getRequestedKeys().includes('grokSub2apiWebchat2ApiUploadEnabled'));
+});
+
+test('getPersistedSettings migrates the retired Grok SUB2API webchat switch', async () => {
+  const api = buildHarness(`
+const chrome = {
+  storage: {
+    local: {
+      async get() {
+        return { grokSub2apiWebchat2ApiUploadEnabled: true };
+      },
+    },
+  },
+};
+`);
+
+  const state = await api.getPersistedSettings();
+
+  assert.equal(state.grokSub2apiGrok2ApiUploadEnabled, true);
+  assert.equal(state.settingsState.flows.grok.targets.sub2api.grok2apiUploadEnabled, true);
+  assert.equal(Object.hasOwn(state, 'grokSub2apiWebchat2ApiUploadEnabled'), false);
+  assert.equal(
+    Object.hasOwn(state.settingsState.flows.grok.targets.sub2api, 'webchat2apiUploadEnabled'),
+    false
+  );
 });
 
 test('getPersistedSettings can project schema-only storage back into legacy flat settings', async () => {
@@ -977,6 +1013,9 @@ function getPersistedWrites() { return persistedWrites; }
     grokSub2apiGroupNames: ['grok-default', 'grok-pool'],
     grokSub2apiAccountPriority: 3,
     grokSub2apiDefaultProxyName: 'xai-proxy',
+    grok2ApiUrl: 'https://grok2api.example.com/admin/account',
+    grok2ApiAdminKey: 'grok2api-key',
+    grokSub2apiGrok2ApiUploadEnabled: true,
   });
   const settingsState = api.getPersistedWrites().at(-1).settingsState;
 
@@ -989,6 +1028,10 @@ function getPersistedWrites() { return persistedWrites; }
   assert.deepEqual(settingsState.flows.grok.targets.sub2api.sub2apiGroupNames, ['grok-default', 'grok-pool']);
   assert.equal(settingsState.flows.grok.targets.sub2api.sub2apiAccountPriority, 3);
   assert.equal(settingsState.flows.grok.targets.sub2api.sub2apiDefaultProxyName, 'xai-proxy');
+  assert.equal(settingsState.flows.grok.targets.grok2api.baseUrl, 'https://grok2api.example.com/admin/account');
+  assert.equal(settingsState.flows.grok.targets.grok2api.apiKey, 'grok2api-key');
+  assert.equal(settingsState.flows.grok.targets.sub2api.grok2apiUploadEnabled, true);
+  assert.equal(Object.hasOwn(settingsState.flows.grok.targets.sub2api, 'webchat2apiUploadEnabled'), false);
 });
 
 test('setPersistentSettings replace mode does not retain previous non-schema settings', async () => {

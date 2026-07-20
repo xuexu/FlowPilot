@@ -44,6 +44,18 @@ test('grok state view projects canonical runtime state into legacy flat read fie
             message: 'ok',
             targetUrl: 'https://remote.example.com/api/remote-account/inject',
           },
+          oauth: {
+            sessionId: 'oauth-session',
+            state: 'oauth-state',
+            authUrl: 'https://auth.x.ai/oauth2/authorize',
+            authTabId: 84,
+            proxyId: 7,
+            groupIds: [31, 31, 32],
+            status: 'awaiting_authorization',
+            startedAt: 5000,
+            completedAt: 0,
+            lastError: '',
+          },
         },
       },
     },
@@ -71,6 +83,10 @@ test('grok state view projects canonical runtime state into legacy flat read fie
   assert.equal(view.flowState.grok.sso.currentCookie, 'cookie-a');
   assert.equal(view.flowState.grok.upload.status, 'uploaded');
   assert.equal(view.flowState.grok.upload.targetId, 'webchat2api');
+  assert.equal(view.flowState.grok.oauth.sessionId, 'oauth-session');
+  assert.equal(view.flowState.grok.oauth.authTabId, 84);
+  assert.deepEqual(view.flowState.grok.oauth.groupIds, [31, 32]);
+  assert.equal(Object.prototype.hasOwnProperty.call(view.flowState.grok.oauth, 'code'), false);
   assert.equal(view.flows.grok.sso.cookies.length, 2);
 });
 
@@ -148,8 +164,8 @@ test('grok state keeps canonical runtime authoritative over stale non-empty flat
             targetId: 'sub2api',
             status: 'uploaded',
             uploadedAt: 123,
-            message: 'canonical import complete',
-            targetUrl: 'https://sub.example.com/api/v1/admin/grok/sso-to-oauth',
+            message: 'canonical OAuth creation complete',
+            targetUrl: 'https://sub.example.com/api/v1/admin/grok/oauth/create-from-oauth',
           },
         },
       },
@@ -161,11 +177,11 @@ test('grok state keeps canonical runtime authoritative over stale non-empty flat
   assert.equal(runtimeState.upload.targetId, 'sub2api');
   assert.equal(runtimeState.upload.status, 'uploaded');
   assert.equal(runtimeState.upload.uploadedAt, 123);
-  assert.equal(runtimeState.upload.message, 'canonical import complete');
-  assert.equal(runtimeState.upload.targetUrl, 'https://sub.example.com/api/v1/admin/grok/sso-to-oauth');
+  assert.equal(runtimeState.upload.message, 'canonical OAuth creation complete');
+  assert.equal(runtimeState.upload.targetUrl, 'https://sub.example.com/api/v1/admin/grok/oauth/create-from-oauth');
 });
 
-test('grok fresh keep-state reset clears registration, SSO, and upload runtime', () => {
+test('grok fresh keep-state reset clears registration, SSO, upload, and OAuth runtime', () => {
   const api = loadGrokStateApi();
   const patch = api.buildFreshKeepState({
     runtimeState: {
@@ -192,6 +208,15 @@ test('grok fresh keep-state reset clears registration, SSO, and upload runtime',
             message: 'ok',
             targetUrl: 'https://remote.example.com/api/remote-account/inject',
           },
+          oauth: {
+            sessionId: 'oauth-session',
+            state: 'oauth-state',
+            authUrl: 'https://auth.x.ai/oauth2/authorize',
+            authTabId: 84,
+            groupIds: [31],
+            status: 'awaiting_authorization',
+            startedAt: 4000,
+          },
         },
       },
     },
@@ -213,6 +238,9 @@ test('grok fresh keep-state reset clears registration, SSO, and upload runtime',
   assert.equal(patch.runtimeState.flowState.grok.sso.currentCookie, '');
   assert.equal(patch.runtimeState.flowState.grok.upload.status, '');
   assert.equal(patch.runtimeState.flowState.grok.upload.targetId, '');
+  assert.equal(patch.runtimeState.flowState.grok.oauth.sessionId, '');
+  assert.equal(patch.runtimeState.flowState.grok.oauth.authTabId, null);
+  assert.deepEqual(patch.runtimeState.flowState.grok.oauth.groupIds, []);
 });
 
 test('grok downstream reset clears only the state owned by the restarted tail', () => {
@@ -241,8 +269,17 @@ test('grok downstream reset clears only the state owned by the restarted tail', 
             targetId: 'sub2api',
             status: 'uploaded',
             uploadedAt: 3000,
-            message: 'old import',
-            targetUrl: 'https://sub.example.com/api/v1/admin/grok/sso-to-oauth',
+            message: 'old OAuth creation',
+            targetUrl: 'https://sub.example.com/api/v1/admin/grok/oauth/create-from-oauth',
+          },
+          oauth: {
+            sessionId: 'oauth-session',
+            state: 'oauth-state',
+            authUrl: 'https://auth.x.ai/oauth2/authorize',
+            authTabId: 84,
+            groupIds: [31],
+            status: 'awaiting_authorization',
+            startedAt: 4000,
           },
         },
       },
@@ -256,11 +293,21 @@ test('grok downstream reset clears only the state owned by the restarted tail', 
   assert.deepEqual(profilePatch.grokSsoCookies, []);
   assert.equal(profilePatch.runtimeState.flowState.grok.upload.targetId, '');
   assert.equal(profilePatch.runtimeState.flowState.grok.upload.status, '');
+  assert.equal(profilePatch.runtimeState.flowState.grok.oauth.sessionId, '');
 
   const extractionPatch = api.buildDownstreamResetPatch('grok-extract-sso-cookie', currentState);
   assert.equal(extractionPatch.runtimeState.flowState.grok.upload.targetId, '');
   assert.equal(extractionPatch.runtimeState.flowState.grok.upload.status, '');
   assert.equal(extractionPatch.runtimeState.flowState.grok.upload.targetUrl, '');
+  assert.equal(extractionPatch.runtimeState.flowState.grok.oauth.sessionId, '');
+
+  const webchatPatch = api.buildDownstreamResetPatch('grok-upload-sso-to-webchat2api', currentState);
+  assert.equal(webchatPatch.runtimeState.flowState.grok.upload.status, 'uploaded');
+  assert.equal(webchatPatch.runtimeState.flowState.grok.oauth.sessionId, '');
+
+  const grok2ApiPatch = api.buildDownstreamResetPatch('grok-upload-sso-to-grok2api', currentState);
+  assert.equal(grok2ApiPatch.runtimeState.flowState.grok.upload.status, 'uploaded');
+  assert.equal(grok2ApiPatch.runtimeState.flowState.grok.oauth.sessionId, '');
 
   const emailPatch = api.buildDownstreamResetPatch('grok-submit-email', currentState);
   assert.equal(emailPatch.grokEmail, '');

@@ -49,9 +49,13 @@ test('grok profile submission waits for human verification success before clicki
   assert.match(source, /GROK_HUMAN_VERIFICATION_SUCCESS_TIMEOUT_MS = 120 \* 1000/);
 });
 
-test('grok profile runner allows the content script to wait for human verification', async () => {
+test('grok profile runner submits once and waits for registration success', async () => {
   const api = loadGrokRunnerApi();
-  const sendCalls = [];
+  const directSendCalls = [];
+  const resilientSendCalls = [];
+  const sleepCalls = [];
+  let cookieReadCount = 0;
+  let completedPayload = null;
   let currentState = {
     activeFlowId: 'grok',
     grokRegisterTabId: 303,
@@ -68,12 +72,20 @@ test('grok profile runner allows the content script to wait for human verificati
   const runner = api.createGrokRegisterRunner({
     addLog: async () => {},
     chrome: {
+      cookies: {
+        get: async () => {
+          cookieReadCount += 1;
+          return cookieReadCount >= 4 ? { value: 'registration-cookie' } : null;
+        },
+      },
       tabs: {
         get: async (tabId) => ({ id: tabId }),
         update: async () => {},
       },
     },
-    completeNodeFromBackground: async () => {},
+    completeNodeFromBackground: async (_nodeId, payload) => {
+      completedPayload = payload;
+    },
     ensureContentScriptReadyOnTab: async () => {},
     generatePassword: () => 'StrongPassword123!',
     generateRandomName: () => ({ firstName: 'Alex', lastName: 'Morgan' }),
@@ -81,8 +93,8 @@ test('grok profile runner allows the content script to wait for human verificati
     getTabId: async () => 303,
     isTabAlive: async () => true,
     registerTab: async () => {},
-    sendToContentScriptResilient: async (_sourceId, message, options = {}) => {
-      sendCalls.push({ message, options });
+    sendToContentScript: async (_sourceId, message, options = {}) => {
+      directSendCalls.push({ message, options });
       return {
         submitted: true,
         state: 'profile_submitted',
@@ -90,19 +102,34 @@ test('grok profile runner allows the content script to wait for human verificati
         url: 'https://accounts.x.ai/sign-up',
       };
     },
+    sendToContentScriptResilient: async (_sourceId, message, options = {}) => {
+      resilientSendCalls.push({ message, options });
+      if (message.nodeId === 'grok-submit-profile') {
+        throw new Error('profile submission must not use retrying transport');
+      }
+      return { state: 'profile_entry', url: 'https://accounts.x.ai/sign-up' };
+    },
     setPasswordState: async () => {},
     setState: async (patch) => {
       currentState = { ...currentState, ...patch };
     },
-    sleepWithStop: async () => {},
+    sleepWithStop: async (ms) => {
+      sleepCalls.push(ms);
+    },
     waitForTabStableComplete: async () => {},
   });
 
   await runner.executeGrokSubmitProfile({ nodeId: 'grok-submit-profile', ...currentState });
 
-  const profileSubmitCall = sendCalls.find(({ message }) => message.nodeId === 'grok-submit-profile');
+  const profileSubmitCall = directSendCalls.find(({ message }) => message.nodeId === 'grok-submit-profile');
+  assert.equal(directSendCalls.length, 1);
+  assert.equal(resilientSendCalls.some(({ message }) => message.nodeId === 'grok-submit-profile'), false);
   assert.equal(profileSubmitCall.options.timeoutMs, api.GROK_PROFILE_SUBMIT_COMMAND_TIMEOUT_MS);
   assert.equal(profileSubmitCall.options.timeoutMs, 150 * 1000);
+  assert.equal(profileSubmitCall.options.responseTimeoutMs, api.GROK_PROFILE_SUBMIT_COMMAND_TIMEOUT_MS);
+  assert.equal(cookieReadCount, 4);
+  assert.deepEqual(sleepCalls, [api.GROK_REGISTRATION_SUCCESS_POLL_INTERVAL_MS]);
+  assert.equal(completedPayload.grokPageState, 'signed_in');
   assert.match(profileSubmitCall.options.logMessage, /等待人机验证成功/);
 });
 

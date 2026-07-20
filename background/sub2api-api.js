@@ -16,8 +16,9 @@
     const DEFAULT_CONCURRENCY = 10;
     const DEFAULT_PRIORITY = 1;
     const DEFAULT_RATE_MULTIPLIER = 1;
-    const GROK_SSO_IMPORT_PATH = '/api/v1/admin/grok/sso-to-oauth';
-    const GROK_SSO_IMPORT_TIMEOUT_MS = 180000;
+    const GROK_OAUTH_AUTH_URL_PATH = '/api/v1/admin/grok/oauth/auth-url';
+    const GROK_OAUTH_CREATE_PATH = '/api/v1/admin/grok/oauth/create-from-oauth';
+    const GROK_OAUTH_CREATE_TIMEOUT_MS = 180000;
 
     function normalizeString(value = '') {
       return String(value || '').trim();
@@ -214,62 +215,44 @@
         || normalizeString(state.email);
     }
 
-    function resolveGrokSsoCookie(state = {}) {
-      const runtimeState = resolveGrokRuntimeState(state);
-      return normalizeString(runtimeState?.sso?.currentCookie)
-        || normalizeString(state.grokSsoCookie);
+    function normalizePositiveIds(values = []) {
+      if (!Array.isArray(values)) {
+        return [];
+      }
+      return Array.from(new Set(
+        values
+          .map((value) => Number(value))
+          .filter((value) => Number.isSafeInteger(value) && value > 0)
+      ));
     }
 
-    function normalizeGrokSsoImportResult(result = {}) {
-      return {
-        created: Array.isArray(result?.created) ? result.created : [],
-        failed: Array.isArray(result?.failed) ? result.failed : [],
-      };
-    }
-
-    function buildGrokSsoImportFailureMessage(result = {}) {
-      const normalized = normalizeGrokSsoImportResult(result);
-      const details = normalized.failed.map((item, index) => {
-        const itemIndex = Math.max(1, Number(item?.index) || index + 1);
-        const name = normalizeString(item?.name || item?.email);
-        const message = normalizeString(item?.error || item?.message || item?.reason) || '未知服务端错误';
-        return `#${itemIndex}${name ? `（${name}）` : ''}：${message}`;
-      });
-      if (details.length) {
-        return `SUB2API Grok SSO 导入失败：${details.join('；')}`;
-      }
-      return 'SUB2API Grok SSO 导入失败：服务端未创建任何账号。';
-    }
-
-    async function importGrokSso(state = {}, options = {}) {
-      const logLabel = normalizeString(options.logLabel) || 'Grok SUB2API 导入';
-      const accountName = resolveGrokRegistrationEmail(state);
-      const ssoCookie = resolveGrokSsoCookie(state);
-      if (!accountName) {
-        throw new Error('缺少本轮 Grok 注册邮箱，无法将账号导入 SUB2API。');
-      }
-      if (!ssoCookie) {
-        throw new Error('缺少 Grok SSO Cookie，请先完成步骤 5。');
-      }
-      const configuredGroupNames = normalizeSub2ApiGroupNames(
+    function resolveConfiguredGrokGroupNames(state = {}) {
+      return normalizeSub2ApiGroupNames(
         Array.isArray(state.sub2apiGroupNames) && state.sub2apiGroupNames.length
           ? state.sub2apiGroupNames
           : state.sub2apiGroupName,
         { fallbackToDefault: false }
       );
+    }
+
+    async function prepareGrokOAuth(state = {}, options = {}) {
+      const logLabel = normalizeString(options.logLabel) || 'Grok SUB2API OAuth';
+      const accountName = resolveGrokRegistrationEmail(state);
+      if (!accountName) {
+        throw new Error('缺少本轮 Grok 注册邮箱，无法创建 SUB2API 账号。');
+      }
+      const configuredGroupNames = resolveConfiguredGrokGroupNames(state);
       if (!configuredGroupNames.length) {
         throw new Error('请先添加 Grok SUB2API 分组。');
       }
 
-      await logWithOptions(`${logLabel}：正在登录 SUB2API 并准备导入 Grok 账号...`, 'info', options);
+      await logWithOptions(`${logLabel}：正在登录 SUB2API 并准备 OAuth 授权...`, 'info', options);
       const { origin, token } = await loginSub2Api(state, options);
       const groups = await getGroupsByNames(origin, token, configuredGroupNames, {
         ...options,
         platform: 'grok',
       });
-      const groupIds = groups
-        .map((group) => Number(group?.id))
-        .filter((id) => Number.isSafeInteger(id) && id > 0);
+      const groupIds = normalizePositiveIds(groups.map((group) => group?.id));
       if (!groupIds.length) {
         throw new Error('SUB2API 返回的 Grok 目标分组 ID 无效。');
       }
@@ -279,34 +262,89 @@
         ? await resolveSub2ApiProxy(origin, token, proxyPreference, options)
         : null;
       const proxyId = normalizeProxyId(proxy?.id);
+      const authData = await requestJson(origin, GROK_OAUTH_AUTH_URL_PATH, {
+        method: 'POST',
+        token,
+        timeoutMs: options.timeoutMs,
+        body: proxyId ? { proxy_id: proxyId } : {},
+      });
+      const authUrl = normalizeString(authData?.auth_url || authData?.authUrl);
+      const sessionId = normalizeString(authData?.session_id || authData?.sessionId);
+      const oauthState = normalizeString(authData?.state);
+      if (!authUrl || !sessionId || !oauthState) {
+        throw new Error('SUB2API OAuth 授权地址响应缺少 auth_url、session_id 或 state。');
+      }
+      try {
+        const parsed = new URL(authUrl);
+        if (parsed.protocol !== 'https:' || !parsed.hostname.endsWith('.x.ai')) {
+          throw new Error('invalid host');
+        }
+      } catch {
+        throw new Error('SUB2API 返回的 Grok OAuth 授权地址无效。');
+      }
+
+      return {
+        accountName,
+        authUrl,
+        groupIds,
+        origin,
+        proxyId,
+        sessionId,
+        state: oauthState,
+        targetUrl: `${origin}${GROK_OAUTH_AUTH_URL_PATH}`,
+      };
+    }
+
+    async function createGrokAccountFromOAuth(state = {}, oauthContext = {}, code = '', options = {}) {
+      const logLabel = normalizeString(options.logLabel) || 'Grok SUB2API OAuth';
+      const accountName = resolveGrokRegistrationEmail(state);
+      const authorizationCode = normalizeString(code);
+      const sessionId = normalizeString(oauthContext?.sessionId || oauthContext?.session_id);
+      const oauthState = normalizeString(oauthContext?.state);
+      const groupIds = normalizePositiveIds(oauthContext?.groupIds || oauthContext?.group_ids);
+      const proxyId = normalizeProxyId(oauthContext?.proxyId ?? oauthContext?.proxy_id);
       const accountPriority = resolveSub2ApiAccountPriority(state);
-      const importPayload = {
-        sso_tokens: [ssoCookie],
+
+      if (!accountName) {
+        throw new Error('缺少本轮 Grok 注册邮箱，无法创建 SUB2API 账号。');
+      }
+      if (!authorizationCode) {
+        throw new Error('缺少 Grok OAuth 授权码，无法创建 SUB2API 账号。');
+      }
+      if (!sessionId || !oauthState) {
+        throw new Error('缺少 SUB2API OAuth session_id 或 state，请重新获取授权地址。');
+      }
+      if (!groupIds.length) {
+        throw new Error('缺少 SUB2API Grok 目标分组，请重新获取授权地址。');
+      }
+
+      const { origin, token } = await loginSub2Api(state, options);
+      const payload = {
+        session_id: sessionId,
+        state: oauthState,
+        code: authorizationCode,
         name: accountName,
         ...(proxyId ? { proxy_id: proxyId } : {}),
         group_ids: groupIds,
         concurrency: DEFAULT_CONCURRENCY,
         priority: accountPriority,
-        rate_multiplier: DEFAULT_RATE_MULTIPLIER,
-        auto_pause_on_expired: true,
       };
-
-      await logWithOptions(`${logLabel}：正在导入 Grok SSO 到 SUB2API...`, 'info', options);
-      const result = normalizeGrokSsoImportResult(await requestJson(origin, GROK_SSO_IMPORT_PATH, {
+      await logWithOptions(`${logLabel}：正在创建 Grok OAuth 账号...`, 'info', options);
+      const account = await requestJson(origin, GROK_OAUTH_CREATE_PATH, {
         method: 'POST',
         token,
-        timeoutMs: GROK_SSO_IMPORT_TIMEOUT_MS,
-        body: importPayload,
-      }));
-      if (!result.created.length || result.failed.length) {
-        throw new Error(buildGrokSsoImportFailureMessage(result));
+        timeoutMs: options.createTimeoutMs || GROK_OAUTH_CREATE_TIMEOUT_MS,
+        body: payload,
+      });
+      if (!account || typeof account !== 'object' || !Number.isSafeInteger(Number(account.id)) || Number(account.id) <= 0) {
+        throw new Error('SUB2API OAuth 创建接口未返回有效账号。');
       }
 
-      const verifiedStatus = `SUB2API 已导入 ${result.created.length} 个 Grok OAuth 账号。`;
+      const verifiedStatus = `SUB2API 已创建 Grok OAuth 账号：${accountName}。`;
       await logWithOptions(verifiedStatus, 'ok', options);
       return {
-        ...result,
-        targetUrl: `${origin}${GROK_SSO_IMPORT_PATH}`,
+        account,
+        targetUrl: `${origin}${GROK_OAUTH_CREATE_PATH}`,
         verifiedStatus,
       };
     }
@@ -931,7 +969,8 @@
       extractStateFromAuthUrl,
       generateOpenAiAuthUrl,
       getGroupsByNames,
-      importGrokSso,
+      prepareGrokOAuth,
+      createGrokAccountFromOAuth,
       importCurrentChatGptSession,
       loginSub2Api,
       normalizeProxyId,
@@ -942,7 +981,6 @@
       resolveSub2ApiAccountPriority,
       resolveSub2ApiProxy,
       resolveGrokRegistrationEmail,
-      resolveGrokSsoCookie,
       submitOpenAiCallback,
     };
   }

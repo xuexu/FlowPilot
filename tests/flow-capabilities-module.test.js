@@ -153,7 +153,7 @@ test('flow capability registry exposes Grok as an independent SSO flow without O
   assert.equal(capabilityState.canShowLuckmail, false);
   assert.equal(capabilityState.effectiveSignupMethod, 'email');
   assert.equal(capabilityState.effectiveTargetId, 'webchat2api');
-  assert.deepEqual(capabilityState.supportedTargetIds, ['webchat2api', 'sub2api']);
+  assert.deepEqual(capabilityState.supportedTargetIds, ['webchat2api', 'grok2api', 'sub2api']);
   assert.deepEqual(capabilityState.flowCapabilities.contributionAdapterIds, []);
   assert.deepEqual(
     capabilityState.visibleGroupIds,
@@ -177,6 +177,43 @@ test('flow capability registry switches Grok settings groups for SUB2API target'
     capabilityState.visibleGroupIds,
     ['grok-runtime-status', 'shared-auto-run', 'grok-target-sub2api', 'service-account', 'service-email', 'service-proxy']
   );
+  assert.equal(capabilityState.stepDefinitionOptions.grokSub2apiGrok2ApiUploadEnabled, false);
+});
+
+test('flow capability registry validates Grok2API target and optional SUB2API dual publishing', () => {
+  const api = loadApi();
+  const registry = api.createFlowCapabilityRegistry();
+
+  const missingConfig = registry.validateAutoRunStart({
+    state: {
+      activeFlowId: 'grok',
+      targetId: 'sub2api',
+      grokSub2apiGrok2ApiUploadEnabled: true,
+    },
+  });
+
+  assert.equal(missingConfig.ok, false);
+  assert.equal(missingConfig.errors[0].code, 'grok2api_config_required');
+  assert.equal(missingConfig.capabilityState.stepDefinitionOptions.grokSub2apiGrok2ApiUploadEnabled, true);
+
+  const configured = registry.validateAutoRunStart({
+    state: {
+      activeFlowId: 'grok',
+      targetId: 'sub2api',
+      grokSub2apiGrok2ApiUploadEnabled: true,
+      grok2ApiUrl: 'https://grok2api.example.com/admin',
+      grok2ApiAdminKey: 'admin-key',
+    },
+  });
+
+  assert.equal(configured.ok, true);
+  assert.equal(configured.capabilityState.grok2Api.configComplete, true);
+
+  const directTargetMissing = registry.validateAutoRunStart({
+    state: { activeFlowId: 'grok', targetId: 'grok2api' },
+  });
+  assert.equal(directTargetMissing.ok, false);
+  assert.equal(directTargetMissing.errors[0].code, 'grok2api_config_required');
 });
 
 test('flow capability registry rejects retired Plus mode and unsupported targets', () => {

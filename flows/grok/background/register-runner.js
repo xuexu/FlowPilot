@@ -6,8 +6,9 @@
   const DEFAULT_GROK_PAGE_TIMEOUT_MS = 90 * 1000;
   const GROK_VERIFICATION_PAGE_STATE = 'verification_code_entry';
   const GROK_VERIFICATION_READY_TIMEOUT_MS = 90 * 1000;
-  const GROK_POST_PROFILE_CF_WAIT_MS = 20 * 1000;
   const GROK_PROFILE_SUBMIT_COMMAND_TIMEOUT_MS = 150 * 1000;
+  const GROK_REGISTRATION_SUCCESS_TIMEOUT_MS = 90 * 1000;
+  const GROK_REGISTRATION_SUCCESS_POLL_INTERVAL_MS = 1000;
   const GROK_PRE_SSO_EXTRACT_WAIT_MS = 10 * 1000;
   const MAIL_2925_FILTER_LOOKBACK_MS = 10 * 60 * 1000;
   const GROK_COOKIE_CLEAR_DOMAINS = Object.freeze([
@@ -48,6 +49,7 @@
       registerTab = async () => {},
       resolveSignupEmailForFlow = null,
       reuseOrCreateTab = async () => null,
+      sendToContentScript = null,
       sendToContentScriptResilient = null,
       setPasswordState = async () => {},
       setState = async () => {},
@@ -174,10 +176,12 @@
     }
 
     async function sendGrokCommand(nodeId, payload = {}, options = {}) {
-      if (typeof sendToContentScriptResilient !== 'function') {
+      const retryTransport = options.retryTransport !== false;
+      const sendCommand = retryTransport ? sendToContentScriptResilient : sendToContentScript;
+      if (typeof sendCommand !== 'function') {
         throw new Error('Grok 注册页通信能力不可用。');
       }
-      const result = await sendToContentScriptResilient(GROK_REGISTER_PAGE_SOURCE_ID, {
+      const result = await sendCommand(GROK_REGISTER_PAGE_SOURCE_ID, {
         type: 'EXECUTE_NODE',
         nodeId,
         step: options.step || 0,
@@ -185,6 +189,7 @@
         payload,
       }, {
         timeoutMs: options.timeoutMs || 45000,
+        responseTimeoutMs: options.responseTimeoutMs,
         retryDelayMs: 700,
         logMessage: options.logMessage || '',
       });
@@ -352,6 +357,49 @@
         }
       }
       return '';
+    }
+
+    async function waitForGrokRegistrationSuccess(options = {}) {
+      const timeoutMs = Math.max(
+        1000,
+        Number(options.timeoutMs) || GROK_REGISTRATION_SUCCESS_TIMEOUT_MS
+      );
+      const intervalMs = Math.max(
+        250,
+        Number(options.intervalMs) || GROK_REGISTRATION_SUCCESS_POLL_INTERVAL_MS
+      );
+      const deadline = Date.now() + timeoutMs;
+      let lastState = '';
+      let lastError = '';
+
+      while (Date.now() <= deadline) {
+        throwIfStopped();
+        if (await readSsoCookieFromChrome()) {
+          return { state: 'signed_in' };
+        }
+
+        try {
+          const pageState = await getGrokRegisterPageState({
+            step: options.step || 4,
+            timeoutMs: Math.max(5000, intervalMs + 3000),
+          });
+          lastState = cleanString(pageState?.state);
+          lastError = '';
+          if (lastState === 'signed_in' || lastState === 'sso_cookie_found') {
+            return pageState;
+          }
+        } catch (error) {
+          lastError = getErrorMessage(error);
+        }
+
+        const remainingMs = Math.max(0, deadline - Date.now());
+        if (!remainingMs) break;
+        await sleepWithStop(Math.min(intervalMs, remainingMs));
+      }
+
+      const stateLabel = lastState || 'unknown';
+      const errorLabel = lastError ? `，最后通信错误：${lastError}` : '';
+      throw new Error(`Grok 注册提交后未确认注册成功，当前页面状态：${stateLabel}${errorLabel}。`);
     }
 
     async function executeGrokOpenSignupPage(state = {}) {
@@ -611,6 +659,7 @@
         }
         await activateTab(tabId);
         await ensureContentReady(tabId);
+        await log('步骤 4：正在填写 xAI 注册资料，填写一次后等待人机验证成功...', 'info', nodeId);
         const result = await sendGrokCommand(nodeId, {
           firstName: profile.firstName,
           lastName: profile.lastName,
@@ -618,21 +667,22 @@
         }, {
           step: 4,
           timeoutMs: GROK_PROFILE_SUBMIT_COMMAND_TIMEOUT_MS,
+          responseTimeoutMs: GROK_PROFILE_SUBMIT_COMMAND_TIMEOUT_MS,
+          retryTransport: false,
           logMessage: '步骤 4：正在填写 xAI 注册资料并等待人机验证成功...',
         });
-        await log(`步骤 4：已提交 Grok 注册资料，等待 ${Math.floor(GROK_POST_PROFILE_CF_WAIT_MS / 1000)} 秒完成注册验证...`, 'info', nodeId);
-        await sleepWithStop(GROK_POST_PROFILE_CF_WAIT_MS);
-        await ensureContentReady(tabId, { timeoutMs: DEFAULT_GROK_PAGE_TIMEOUT_MS });
-        await log('步骤 4：已提交 Grok 注册资料并完成等待。', 'ok', nodeId);
+        await log('步骤 4：人机验证已通过，正在确认 Grok 注册成功...', 'info', nodeId);
+        const registrationState = await waitForGrokRegistrationSuccess({ step: 4 });
+        await log('步骤 4：已完成 Grok 注册并确认登录状态。', 'ok', nodeId);
         await completeNode(nodeId, {
           grokFirstName: profile.firstName,
           grokLastName: profile.lastName,
           grokPassword: password,
-          grokPageState: result.state || 'profile_submitted',
+          grokPageState: registrationState.state || result.state || 'profile_submitted',
           grokPageUrl: result.url || '',
           ...buildGrokRuntimePatch({
             session: {
-              pageState: result.state || 'profile_submitted',
+              pageState: registrationState.state || result.state || 'profile_submitted',
               pageUrl: result.url || '',
               lastError: '',
             },
@@ -752,8 +802,9 @@
   return {
     DEFAULT_GROK_PAGE_TIMEOUT_MS,
     GROK_COOKIE_CLEAR_DOMAINS,
-    GROK_POST_PROFILE_CF_WAIT_MS,
     GROK_PROFILE_SUBMIT_COMMAND_TIMEOUT_MS,
+    GROK_REGISTRATION_SUCCESS_POLL_INTERVAL_MS,
+    GROK_REGISTRATION_SUCCESS_TIMEOUT_MS,
     GROK_PRE_SSO_EXTRACT_WAIT_MS,
     GROK_REGISTER_PAGE_SOURCE_ID,
     GROK_SIGNUP_URL,

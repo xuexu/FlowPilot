@@ -189,6 +189,7 @@ return {
     signupMethod: 'phone',
     phoneVerificationEnabled: false,
     phoneSignupReloginAfterBindEmailEnabled: false,
+    grokSub2apiGrok2ApiUploadEnabled: false,
   }]);
   assert.equal(steps[0].title, '注册并输入手机号');
 });
@@ -208,7 +209,7 @@ const self = {
       return [{
         id: 6,
         key: options.targetId === 'sub2api'
-          ? 'grok-import-sso-to-sub2api'
+          ? 'grok-complete-sub2api-oauth'
           : 'grok-upload-sso-to-webchat2api',
       }];
     },
@@ -234,5 +235,5 @@ return {
   });
 
   assert.equal(api.getCaptured()[0].targetId, 'sub2api');
-  assert.equal(steps.at(-1)?.key, 'grok-import-sso-to-sub2api');
+  assert.equal(steps.at(-1)?.key, 'grok-complete-sub2api-oauth');
 });

@@ -201,6 +201,19 @@
             data-hide-label="隐藏 SUB2API 密码" aria-label="显示 SUB2API 密码" title="显示 SUB2API 密码"></button>
         </div>
       </div>
+      <div class="data-row" id="row-grok-sub2api-grok2api-upload" style="display:none;">
+        <span class="data-label">双发布</span>
+        <div class="data-inline">
+          <label class="toggle-switch" for="input-grok-sub2api-grok2api-upload-enabled"
+            title="开启后先上传到 grok2api，再完成 SUB2API OAuth 创建">
+            <input type="checkbox" id="input-grok-sub2api-grok2api-upload-enabled" />
+            <span class="toggle-switch-track" aria-hidden="true">
+              <span class="toggle-switch-thumb"></span>
+            </span>
+          </label>
+          <span class="data-value">同时上传到 grok2api</span>
+        </div>
+      </div>
       <div class="data-row" id="row-sub2api-group" style="display:none;">
         <span class="data-label">分组</span>
         <div class="data-inline">
@@ -367,6 +380,22 @@
             data-password-toggle="input-grok-webchat2api-key" data-show-label="显示 webchat2api 管理密钥"
             data-hide-label="隐藏 webchat2api 管理密钥" aria-label="显示 webchat2api 管理密钥"
             title="显示 webchat2api 管理密钥"></button>
+        </div>
+      </div>
+      <div class="data-row" id="row-grok2api-url" style="display:none;">
+        <span class="data-label">grok2api</span>
+        <input type="text" id="input-grok2api-url" class="data-input"
+          placeholder="请输入 grok2api 地址，例如 http://localhost:8000" />
+      </div>
+      <div class="data-row" id="row-grok2api-key" style="display:none;">
+        <span class="data-label">Admin Key</span>
+        <div class="input-with-icon">
+          <input type="password" id="input-grok2api-key" class="data-input data-input-with-icon"
+            placeholder="请输入 grok2api Admin Key" />
+          <button id="btn-toggle-grok2api-key" class="input-icon-btn" type="button"
+            data-password-toggle="input-grok2api-key" data-show-label="显示 grok2api Admin Key"
+            data-hide-label="隐藏 grok2api Admin Key" aria-label="显示 grok2api Admin Key"
+            title="显示 grok2api Admin Key"></button>
         </div>
       </div>
       <div class="data-row" id="row-grok-register-status" style="display:none;">
