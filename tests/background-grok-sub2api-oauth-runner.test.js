@@ -110,7 +110,10 @@ function createHarness(options = {}) {
         async update() {},
       },
     },
-    completeNodeFromBackground: async (nodeId, payload) => completed.push({ nodeId, payload }),
+    completeNodeFromBackground: async (nodeId, payload) => {
+      events.push(`completed:${nodeId}`);
+      completed.push({ nodeId, payload });
+    },
     createSub2ApiApi: () => api,
     ensureContentScriptReadyOnTab: async () => { ensureReadyCount += 1; },
     getState: async () => currentState,
@@ -156,7 +159,12 @@ function createHarness(options = {}) {
 }
 
 test('Grok SUB2API OAuth start stores hidden context and opens the authorization tab', async () => {
-  const harness = createHarness();
+  const harness = createHarness({
+    pageStates: [
+      { state: 'loading', url: 'https://auth.x.ai/oauth2/authorize' },
+      { state: 'consent_page', url: 'https://auth.x.ai/oauth2/authorize' },
+    ],
+  });
 
   await harness.runner.executeGrokStartSub2ApiOAuth({ nodeId: 'grok-start-sub2api-oauth', step: 5 });
   const runtime = harness.getState().runtimeState.flowState.grok;
@@ -167,6 +175,12 @@ test('Grok SUB2API OAuth start stores hidden context and opens the authorization
   assert.equal(runtime.oauth.authTabId, 70);
   assert.equal(runtime.oauth.status, 'awaiting_authorization');
   assert.equal(harness.completed.at(-1).nodeId, 'grok-start-sub2api-oauth');
+  assert.equal(harness.getEnsureReadyCount() >= 1, true);
+  assert.deepEqual(harness.events.slice(-3), [
+    'GET_GROK_SUB2API_OAUTH_STATE',
+    'GET_GROK_SUB2API_OAUTH_STATE',
+    'completed:grok-start-sub2api-oauth',
+  ]);
   assert.equal(harness.logs.some((message) => message.includes('session-1') || message.includes('state-1')), false);
 });
 
@@ -246,7 +260,10 @@ test('Grok SUB2API OAuth retry regenerates an errored session without touching w
       lastError: 'old failure',
       startedAt: 1_000,
     }),
-    pageStates: [{ state: 'code_page', code: 'retry-code' }],
+    pageStates: [
+      { state: 'consent_page', url: 'https://auth.x.ai/oauth2/authorize' },
+      { state: 'code_page', code: 'retry-code' },
+    ],
   });
 
   await harness.runner.executeGrokCompleteSub2ApiOAuth({ nodeId: 'grok-complete-sub2api-oauth', step: 8 });

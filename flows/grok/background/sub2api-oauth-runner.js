@@ -4,6 +4,8 @@
   const grokStateApi = root?.MultiPageBackgroundGrokState || null;
   const SOURCE_ID = 'grok-sub2api-oauth-page';
   const AUTHORIZATION_TIMEOUT_MS = 180000;
+  const AUTHORIZATION_PAGE_READY_TIMEOUT_MS = 30000;
+  const AUTHORIZATION_PAGE_READY_POLL_INTERVAL_MS = 500;
   const SESSION_FRESHNESS_MS = 25 * 60 * 1000;
 
   function isPlainObject(value) {
@@ -206,24 +208,15 @@
           targetUrl: context.targetUrl,
         },
       });
-      await log('SUB2API OAuth 授权页已打开。', 'ok', nodeId);
+      await waitForAuthorizationPageReady(tabId);
+      await log('SUB2API OAuth 授权页已加载完成。', 'ok', nodeId);
       if (options.completeNode !== false) {
         await completeNodeFromBackground(nodeId, payload);
       }
       return { context, payload, tabId };
     }
 
-    async function ensureAuthorizationTab(currentState = {}) {
-      const runtime = readRuntime(currentState);
-      let tabId = Number.isInteger(runtime.oauth?.authTabId)
-        ? runtime.oauth.authTabId
-        : await getTabId(SOURCE_ID);
-      if (!Number.isInteger(tabId) || !await isTabAlive(SOURCE_ID)) {
-        tabId = await openAuthorizationTab(runtime.oauth?.authUrl, tabId);
-        await applyRuntimeState(currentState, {
-          oauth: { authTabId: tabId },
-        });
-      }
+    async function prepareAuthorizationTab(tabId) {
       if (typeof waitForTabStableComplete === 'function') {
         await waitForTabStableComplete(tabId, {
           timeoutMs: 30000,
@@ -241,6 +234,20 @@
           logMessage: '正在连接 Grok OAuth 授权页...',
         });
       }
+    }
+
+    async function ensureAuthorizationTab(currentState = {}) {
+      const runtime = readRuntime(currentState);
+      let tabId = Number.isInteger(runtime.oauth?.authTabId)
+        ? runtime.oauth.authTabId
+        : await getTabId(SOURCE_ID);
+      if (!Number.isInteger(tabId) || !await isTabAlive(SOURCE_ID)) {
+        tabId = await openAuthorizationTab(runtime.oauth?.authUrl, tabId);
+        await applyRuntimeState(currentState, {
+          oauth: { authTabId: tabId },
+        });
+      }
+      await prepareAuthorizationTab(tabId);
       return tabId;
     }
 
@@ -256,6 +263,32 @@
       });
       if (result?.error) throw new Error(result.error);
       return result || { state: 'loading' };
+    }
+
+    async function waitForAuthorizationPageReady(tabId) {
+      await prepareAuthorizationTab(tabId);
+      const maxAttempts = Math.max(
+        1,
+        Math.ceil(AUTHORIZATION_PAGE_READY_TIMEOUT_MS / AUTHORIZATION_PAGE_READY_POLL_INTERVAL_MS)
+      );
+      let lastState = 'loading';
+
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        throwIfStopped();
+        const pageState = await readPageState();
+        lastState = cleanString(pageState?.state) || 'loading';
+        if (lastState === 'consent_page' || lastState === 'code_page') {
+          return pageState;
+        }
+        if (lastState === 'error_page') {
+          throw new Error(pageState?.error || 'Grok OAuth 授权页加载失败。');
+        }
+        if (attempt + 1 < maxAttempts) {
+          await sleepWithStop(AUTHORIZATION_PAGE_READY_POLL_INTERVAL_MS);
+        }
+      }
+
+      throw new Error(`Grok OAuth 授权页加载超时，当前页面状态：${lastState}。`);
     }
 
     async function confirmConsent() {
